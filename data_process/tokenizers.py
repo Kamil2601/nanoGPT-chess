@@ -21,7 +21,7 @@ class Tokenizer:
         return [self.pad_token_id, self.bos_token_id, self.eos_token_id]
 
     @property
-    def size(self):
+    def vocab_size(self):
         return len(self.vocab)
 
     def tokenize(self, text: str) -> list:
@@ -51,11 +51,30 @@ class FullMoveTokenizer(Tokenizer):
             + [self.eos_token_id]
         )
 
-    def decode(self, tokens: list) -> str:
-        return " ".join(
-            [
-                self.itos[token]
-                for token in tokens
-                if token not in self.special_tokens_ids
-            ]
+    def decode(self, tokens: list, keep_special_tokens = False) -> str:
+        if keep_special_tokens:
+            return " ".join([self.itos[token] for token in tokens])
+        else:
+            for i, token in enumerate(tokens):
+                if token in [self.eos_token_id, self.pad_token_id]:
+                    tokens = tokens[:i]
+                    break
+            return " ".join([self.itos[token] for token in tokens if token not in self.special_tokens_ids])
+        
+
+class FullMoveTokenizerNoEOS(FullMoveTokenizer):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def tokenize(self, text: str, cut = -1) -> list:
+        split = text.split()
+        if cut >= 0:
+            return split[:cut]
+        return split
+
+    def encode(self, text: str, cut = -1) -> list:
+        return (
+            [self.bos_token_id]
+            + [self.stoi[move] for move in self.tokenize(text, cut)]
         )
+
