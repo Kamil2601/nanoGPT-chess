@@ -2,6 +2,7 @@ import csv
 import io
 import os
 from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
 
 import chess
 import chess.pgn
@@ -39,7 +40,7 @@ def game_to_csv_row(game: chess.pgn.Game | str):
     white_elo = int(game.headers['WhiteElo'])
     black_elo = int(game.headers['BlackElo'])
     result = game.headers['Result']
-    date = game.headers['Date']
+    date = game.headers['UTCDate']
 
     board = game.board()
     moves_uci = []
@@ -84,56 +85,71 @@ def game_to_csv_row_with_index(game_with_index: tuple[chess.pgn.Game, int]):
     
 def read_game(f):
     game = []
+    moves_read = False
     for line in f:
         game.append(line)
         if line.startswith("1."):
+            moves_read = True
+
+        if line == "\n" and moves_read:
             return "".join(game)
     return None
 
-game_index = 0
+def convert_file(input_file_path, output_file_path, skip_games = False):
+    game_index = 0
 
-if os.path.exists(output_file_path):
-    last_game = read_n_to_last_line(output_file_path, 1)
-    if len(last_game) > 2:
-        try:
-            game_index = int(last_game.split(";")[0])
-        except:
-            pass
+    if os.path.exists(output_file_path) and skip_games:
+        last_game = read_n_to_last_line(output_file_path, 1)
+        if len(last_game) > 2:
+            try:
+                game_index = int(last_game.split(";")[0])
+            except:
+                pass
 
 
-with open(input_file_path, 'r') as input_file, open(output_file_path, 'a') as output_file:
-    writer = csv.writer(output_file, delimiter=';')
+    with open(input_file_path, 'r') as input_file, open(output_file_path, 'a') as output_file:
+        writer = csv.writer(output_file, delimiter=';')
 
-    for i in tqdm(range(game_index), desc="Skipping games"):
-        # chess.pgn.skip_game(input_file)
-        # input_file.readlines(20)
-        line = input_file.readline()
-        while not line.startswith("1."):
+        for i in tqdm(range(game_index), desc="Skipping games"):
             line = input_file.readline()
-        # print(line)
+            while not line.startswith("1."):
+                line = input_file.readline()
+
+        while True:
+            games_to_process = []
+            for i in range(100000):
+                game = read_game(input_file)
+
+                if game is None:
+                    break
+
+                games_to_process.append((str(game), game_index))
+                game_index += 1
 
 
-    while True:
-        games_to_process = []
+            with ProcessPoolExecutor(max_workers=num_proc) as executor:
+                rows = executor.map(game_to_csv_row_with_index, games_to_process)
+                    
+            rows = [row for row in rows if row]
 
-        for i in range(100000):
-            game = read_game(input_file)
-
-            if game is None:
+            if len(rows) == 0:
                 break
 
-            games_to_process.append((str(game), game_index))
-            game_index += 1
+            writer.writerows(rows)
+
+            print(game_index)
 
 
-        with ProcessPoolExecutor(max_workers=num_proc) as executor:
-            rows = executor.map(game_to_csv_row_with_index, games_to_process)
-                
-        rows = [row for row in rows if row]
+def main():
+    input_files_dir = Path("./data/lichess_elite_database")
+    input_files = input_files_dir.glob("*.pgn")
 
-        if len(rows) == 0:
-            break
+    output_file = Path("./data/lichess_elite_database.csv")
 
-        writer.writerows(rows)
+    for input_file_path in input_files:
+        print(f"Converting {input_file_path} to csv")
+        convert_file(input_file_path, output_file, skip_games=False)
 
-        print(game_index)
+
+if __name__ == "__main__":
+    main()
