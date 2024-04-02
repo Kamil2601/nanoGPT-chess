@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 import pyarrow as pa
@@ -21,9 +21,8 @@ class WeightsConfig:
     draw_weight: float = 0.5
 
     use_elo: bool = False
-    elo_weight: float | None = None
-    # elo_bias: float | None = None
-
+    elo_weight: Optional[float] = None
+    
     def __str__(self) -> str:
         return str(self.__dict__)
 
