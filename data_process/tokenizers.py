@@ -1,4 +1,7 @@
-from .vocabulary import legal_chess_moves
+import re
+from collections import OrderedDict
+
+from .vocabulary import SQUARE_VOCAB, legal_chess_moves
 
 
 class Tokenizer:
@@ -27,7 +30,7 @@ class Tokenizer:
     def tokenize(self, text: str) -> list:
         pass
 
-    def encode(self, text: str) -> list:
+    def encode(self, text: str, add_special_tokens = True) -> list:
         pass
 
     def decode(self, tokens: list) -> str:
@@ -44,12 +47,14 @@ class FullMoveTokenizer(Tokenizer):
     def tokenize(self, text: str) -> list:
         return text.split()
 
-    def encode(self, text: str) -> list:
-        return (
-            [self.bos_token_id]
-            + [self.stoi[move] for move in self.tokenize(text)]
-            + [self.eos_token_id]
-        )
+    def encode(self, text: str, add_special_tokens = True) -> list:
+        main_tokens = [self.stoi[move] for move in self.tokenize(text)]
+
+        if add_special_tokens:
+            return [self.bos_token_id] + main_tokens + [self.eos_token_id]
+        
+        return main_tokens
+
 
     def decode(self, tokens: list, keep_special_tokens = False) -> str:
         if keep_special_tokens:
@@ -66,15 +71,62 @@ class FullMoveTokenizerNoEOS(FullMoveTokenizer):
     def __init__(self) -> None:
         super().__init__()
 
-    def tokenize(self, text: str, cut = -1) -> list:
-        split = text.split()
+    def tokenize(self, moves: str | list, cut = -1) -> list:
+        if type(moves) == str:
+            moves = moves.split()
+    
         if cut >= 0:
-            return split[:cut]
-        return split
+            return moves[:cut]
+        return moves
 
-    def encode(self, text: str, cut = -1) -> list:
-        return (
-            [self.bos_token_id]
-            + [self.stoi[move] for move in self.tokenize(text, cut)]
-        )
+    def encode(self, text: str, add_special_tokens = True) -> list:
+        main_tokens = [self.stoi[move] for move in self.tokenize(text)]
+
+        if add_special_tokens:
+            return [self.bos_token_id] + main_tokens
+        
+        return main_tokens
+
+
+class SquareTokenizer(Tokenizer):
+    def __init__(self):
+        super().__init__()
+        
+        self.vocab = SQUARE_VOCAB
+        self.stoi = {move: i for i, move in enumerate(self.vocab)}
+        self.itos = self.vocab
+    
+    def get_vocab(self):
+        return self.vocab
+
+    def encode_token(self, token):
+        return self.vocab[token]
+
+    def decode_token(self, token_idx):
+        return self.itos[token_idx]
+    
+    def tokenize(self, game_str):
+        if isinstance(game_str, list):
+            game_moves = game_str
+        else:
+            game_moves = game_str.split()
+        
+        res = []
+
+        for move in game_moves:
+            move_tokens = [move[i:i+2] for i in range(0, len(move), 2)]
+            res.extend(move_tokens)
+
+        return res
+
+
+    def encode(self, game_str, add_special_tokens=True):
+        tokens = self.tokenize(game_str)
+        token_ids = [self.vocab.index(token) for token in tokens]
+
+        if add_special_tokens:
+            return [self.bos_token_id] + token_ids + [self.eos_token_id]
+
+        return token_ids
+        
 
