@@ -21,8 +21,23 @@ class WeightsConfig:
     draw_weight: float = 0.5
 
     use_elo: bool = False
-    elo_weight: Optional[float] = None
+    elo_bias: float = -1000
+    elo_ratio: float = 1/1000
     
+    def compute_weight(self, elo, result):
+        if self.use_elo:
+            elo_weight = (elo + self.elo_bias) * self.elo_ratio
+            elo_weight = max(0, elo_weight)
+        else:
+            elo_weight = 1
+
+        if result == 1:
+            return self.win_weight * elo_weight
+        elif result == 0:
+            return self.loss_weight * elo_weight
+        else:
+            return self.draw_weight * elo_weight
+
     def __str__(self) -> str:
         return str(self.__dict__)
 
@@ -144,40 +159,6 @@ class CutGamesDataset(Dataset):
         return x, y
     
 
-class GamesWithInfoDataset(Dataset):
-    def __init__(self, games_df, tokenizer, max_game_length=300):
-        games_df = games_df[games_df['result'].isin(["1-0", "0-1", "1/2-1/2"])]
-        
-        self.games_df = games_df
-        
-        self.encoded_games = [
-            tokenizer.encode(game) for game in games_df["piece_uci"]
-        ]
-
-        if max_game_length is not None:
-            self.encoded_games = [
-                game for game in self.encoded_games if len(game) <= max_game_length + 2
-            ]
-
-        self.encoded_games = pa.array(self.encoded_games)
-        self.white_elo = torch.tensor(games_df["white_elo"], dtype=torch.float32)
-        self.black_elo = torch.tensor(games_df["black_elo"], dtype=torch.float32)
-
-        result_to_num = {"1-0": 1, "0-1": 0, "1/2-1/2": 0.5}
-        self.result = [result_to_num[result] for result in games_df["result"]]
-        self.result = torch.tensor(self.result, dtype=torch.float32)
-
-    def __len__(self):
-        return len(self.encoded_games)
-    
-    def __getitem__(self, idx):
-        encoded_game = self.encoded_games[idx].as_py()
-        encoded_game = torch.tensor(encoded_game, dtype=torch.long)
-        x = encoded_game[:-1]
-        y = encoded_game[1:]
-        return x, y, self.white_elo[idx], self.black_elo[idx], self.result[idx]
-    
-
 class WeightedGamesDataset(Dataset):
     def __init__(self, games_df, weights_config = None, tokenizer = None, max_game_length=300):
         if tokenizer == None:
@@ -222,22 +203,27 @@ class WeightedGamesDataset(Dataset):
         white_elo = self.white_elo[idx].item()
         black_elo = self.black_elo[idx].item()
 
-        white_elo_weight = 1
-        black_elo_weight = 1
+        # print(white_elo, black_elo, result)
 
-        if self.weights_config.use_elo:
-            white_elo_weight = white_elo * self.weights_config.elo_weight
-            black_elo_weight = black_elo * self.weights_config.elo_weight
+        weights[::2] = self.weights_config.compute_weight(white_elo, result)
+        weights[1::2] = self.weights_config.compute_weight(black_elo, 1-result)
 
-        if result == 1:
-            weights[::2] = self.weights_config.win_weight * white_elo_weight
-            weights[1::2] = self.weights_config.loss_weight * black_elo_weight
-        elif result == 0:
-            weights[::2] = self.weights_config.loss_weight * white_elo_weight
-            weights[1::2] = self.weights_config.win_weight * black_elo_weight
-        else:
-            weights[::2] = self.weights_config.draw_weight * white_elo_weight
-            weights[1::2] = self.weights_config.draw_weight * black_elo_weight
+        # white_elo_weight = 1
+        # black_elo_weight = 1
+
+        # if self.weights_config.use_elo:
+        #     white_elo_weight = white_elo * self.weights_config.elo_weight
+        #     black_elo_weight = black_elo * self.weights_config.elo_weight
+
+        # if result == 1:
+        #     weights[::2] = self.weights_config.win_weight * white_elo_weight
+        #     weights[1::2] = self.weights_config.loss_weight * black_elo_weight
+        # elif result == 0:
+        #     weights[::2] = self.weights_config.loss_weight * white_elo_weight
+        #     weights[1::2] = self.weights_config.win_weight * black_elo_weight
+        # else:
+        #     weights[::2] = self.weights_config.draw_weight * white_elo_weight
+        #     weights[1::2] = self.weights_config.draw_weight * black_elo_weight
 
         return x, y, weights
 
@@ -329,6 +315,7 @@ class GamesDataModule(pl.LightningDataModule):
     def __init__(
         self,
         games,
+        weights_config=None,
         tokenizer=None,
         batch_size=64,
         num_workers=12,
@@ -352,8 +339,8 @@ class GamesDataModule(pl.LightningDataModule):
         self.tokenizer = tokenizer
         self.collate_fn = collate_fn
 
-        self.train_dataset = GamesDataset(self.train_games, tokenizer=tokenizer, max_game_length=max_game_length)
-        self.val_dataset = GamesDataset(self.val_games, tokenizer=tokenizer, max_game_length=max_game_length)
+        self.train_dataset = GamesDataset(self.train_games, weights_config = weights_config, tokenizer=tokenizer, max_game_length=max_game_length)
+        self.val_dataset = GamesDataset(self.val_games, weights_config = weights_config, tokenizer=tokenizer, max_game_length=max_game_length)
 
     @property
     def block_size(self):
@@ -396,6 +383,7 @@ class WeightedGamesDataModule(pl.LightningDataModule):
         collate_fn = collate_fn_with_weights
     ) -> None:
         super().__init__()
+
         train_games, val_games = train_test_split(
             games, test_size=test_size, random_state=42
         )

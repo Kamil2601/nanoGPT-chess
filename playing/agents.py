@@ -125,6 +125,19 @@ def board_to_uci_squares(board: chess.Board):
 
     return res
 
+class UCIEngineAgent(Agent):
+    def __init__(self, engine_path: str, limit: chess.engine.Limit = None, config = None) -> None:
+        super().__init__()
+        self.engine = chess.engine.SimpleEngine.popen_uci(engine_path)
+        if config:
+            self.engine.configure(config)
+        self.limit = limit
+        self.engine.play(chess.Board(), limit=self.limit)
+
+    def play(self, board: chess.Board):
+        result = self.engine.play(board, limit=self.limit)
+        return result.move
+
 
 class GPTSquareTokenAgent(Agent):
     def __init__(self) -> None:
@@ -132,6 +145,7 @@ class GPTSquareTokenAgent(Agent):
         self.model = GPT2LMHeadModel.from_pretrained('shtoshni/gpt2-chess-uci')
         self.model.cpu()
         self.tokenizer = SquareTokenizer()
+        self.random_move_count = 0
 
     def play(self, board: chess.Board):
         pred_move_str = ""
@@ -163,5 +177,101 @@ class GPTSquareTokenAgent(Agent):
 
         if pred_move is None or pred_move not in board.legal_moves:
             pred_move = random.choice(list(board.legal_moves))
+            self.random_move_count += 1
 
         return pred_move
+
+
+
+### MINMAX AGENTS ###
+
+def material(board):
+    white = board.occupied_co[chess.WHITE]
+    black = board.occupied_co[chess.BLACK]
+    white_material = (
+        chess.popcount(white & board.pawns) +
+        3 * chess.popcount(white & board.knights) +
+        3 * chess.popcount(white & board.bishops) +
+        5 * chess.popcount(white & board.rooks) +
+        9 * chess.popcount(white & board.queens)
+    )
+
+    black_material = (
+        chess.popcount(black & board.pawns) +
+        3 * chess.popcount(black & board.knights) +
+        3 * chess.popcount(black & board.bishops) +
+        5 * chess.popcount(black & board.rooks) +
+        9 * chess.popcount(black & board.queens)
+    )
+
+    return white_material, black_material
+
+def material_difference(board):
+    if board.is_checkmate():
+        return -float('inf') if board.turn == chess.WHITE else float('inf')
+    white_material, black_material = material(board)
+    return white_material - black_material
+
+
+class NegaMaxAgent(Agent):
+    def __init__(self, depth = 3) -> None:
+        super().__init__()
+        self.depth = depth
+
+    def play(self, board: chess.Board):
+        best_score = -float('inf')
+        best_moves = []
+        alpha = -float('inf')
+        beta = float('inf')
+        
+        for move in self.ordered_moves(board):
+            board.push(move)
+            score = -self.negamax(board, self.depth - 1, -beta, -alpha)
+            board.pop()
+            if score > best_score:
+                best_score = score
+                best_moves = [move]
+            elif score == best_score:
+                best_moves.append(move)
+            alpha = max(alpha, score)
+        
+        return self.choose_from_best_moves(board, best_moves)
+
+
+    def negamax(self, board, depth, alpha, beta):
+        if depth == 0 or board.is_game_over():
+            return self.evaluate_board(board)
+        
+        max_score = -float('inf')
+        for move in self.ordered_moves(board):
+            board.push(move)
+            score = -self.negamax(board, depth - 1, -beta, -alpha)
+            board.pop()
+            max_score = max(max_score, score)
+            alpha = max(alpha, score)
+            if alpha > beta:
+                break
+        return max_score
+    
+
+    def ordered_moves(self, board):
+        return board.legal_moves
+    
+    def choose_from_best_moves(self, board, best_moves):
+        pass
+    
+    # Evaluate the board from the perspective of the current player
+    def evaluate_board(self, board):
+        pass
+
+
+class NegaMaxMaterialAgent(NegaMaxAgent):
+    def __init__(self, depth = 3) -> None:
+        super().__init__(depth)
+    
+    def evaluate_board(self, board):
+        color = 1 if board.turn == chess.WHITE else -1
+        return color * material_difference(board)
+    
+    def choose_from_best_moves(self, board, best_moves):
+        return random.choice(best_moves)
