@@ -42,27 +42,31 @@ def simple_result(board, time=1):
     return 1
 
 
-def test_agent(agent, opponent=None, n_games=50, n_moves=40, time=1):
+def test_agent(agent, opponent=None, n_games=50, n_moves=40, time=1, verbose=True):
     if not opponent:
         opponent = RandomAgent()
 
     white_scores = []
     for game in tqdm(range(n_games // 2)):
-        final_board = play_game(agent, opponent, n_moves=40)
+        final_board = play_game(agent, opponent, n_moves=n_moves)
         score = simple_result(final_board, time=time)
         white_scores.append(score)
 
     white_stats = Counter(white_scores)
-    print(white_stats)
+
+    if verbose:
+        print(white_stats)
 
     black_scores = []
     for game in tqdm(range(n_games // 2)):
-        final_board = play_game(opponent, agent, n_moves=40)
+        final_board = play_game(opponent, agent, n_moves=n_moves)
         score = simple_result(final_board, time=time)
         black_scores.append(score)
 
     black_stats = Counter(black_scores)
-    print(black_stats)
+
+    if verbose:
+        print(black_stats)
 
     return {"white": white_stats, "black": black_stats}
 

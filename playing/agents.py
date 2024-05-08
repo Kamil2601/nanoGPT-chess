@@ -268,7 +268,7 @@ class NegaMaxAgent(Agent):
 class NegaMaxMaterialAgent(NegaMaxAgent):
     def __init__(self, depth = 3) -> None:
         super().__init__(depth)
-    
+
     def evaluate_board(self, board):
         color = 1 if board.turn == chess.WHITE else -1
         return color * material_difference(board)
