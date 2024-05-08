@@ -339,8 +339,8 @@ class GamesDataModule(pl.LightningDataModule):
         self.tokenizer = tokenizer
         self.collate_fn = collate_fn
 
-        self.train_dataset = GamesDataset(self.train_games, weights_config = weights_config, tokenizer=tokenizer, max_game_length=max_game_length)
-        self.val_dataset = GamesDataset(self.val_games, weights_config = weights_config, tokenizer=tokenizer, max_game_length=max_game_length)
+        self.train_dataset = GamesDataset(self.train_games, tokenizer=tokenizer, max_game_length=max_game_length)
+        self.val_dataset = GamesDataset(self.val_games, tokenizer=tokenizer, max_game_length=max_game_length)
 
     @property
     def block_size(self):
