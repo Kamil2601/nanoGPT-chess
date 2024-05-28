@@ -71,7 +71,7 @@ class FullMoveTokenizerNoEOS(FullMoveTokenizer):
     def __init__(self) -> None:
         super().__init__()
 
-    def tokenize(self, moves: str | list, cut = -1) -> list:
+    def tokenize(self, moves, cut = -1) -> list:
         if type(moves) == str:
             moves = moves.split()
     
