@@ -26,6 +26,9 @@ class Tokenizer:
     @property
     def vocab_size(self):
         return len(self.vocab)
+    
+    def decode_token(self, token_idx):
+        return self.itos[token_idx]
 
     def tokenize(self, text: str) -> list:
         pass

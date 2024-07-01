@@ -89,6 +89,19 @@ class PieceMove(chess.Move):
         super().__init__(from_square, to_square, promotion)
         self.piece_type = piece_type
 
+    @classmethod
+    def from_uci(cls, uci: str):
+        piece_type = chess.PIECE_SYMBOLS.index(uci[0].lower())
+        from_square = chess.SQUARE_NAMES.index(uci[1:3])
+        to_square = chess.SQUARE_NAMES.index(uci[3:5])
+        promotion = None
+
+        if len(uci) == 6:
+            promotion = chess.PIECE_SYMBOLS.index(uci[5].lower())
+
+        return cls(from_square, to_square, promotion=promotion, piece_type=piece_type)
+
+
     def __repr__(self) -> str:
         return f"{str(self)}"
 

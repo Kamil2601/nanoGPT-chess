@@ -43,7 +43,7 @@ class WeightsConfig:
 
 
 class LightningGPT(pl.LightningModule):
-    def __init__(self, config: GPTConfig, learning_rate=1e-3, weight_decay=0.0, tokenizer=None):
+    def __init__(self, config: GPTConfig, learning_rate=1e-3, weight_decay=0.0, tokenizer=None, acc_n_bins=30, acc_bin_range=10):
         super().__init__()
         self.model = GPT(config)
 
@@ -56,6 +56,14 @@ class LightningGPT(pl.LightningModule):
         self.weight_decay = weight_decay
 
         self.test_accuracy = MulticlassAccuracy(tokenizer.vocab_size, ignore_index=0, average="micro")
+
+        self.test_acc_bins = [
+            MulticlassAccuracy(tokenizer.vocab_size, ignore_index=0, average="micro").cpu()
+            for _ in range(acc_n_bins)
+        ]
+
+        self.acc_n_bins = acc_n_bins
+        self.acc_bin_range = acc_bin_range
 
     def forward(self, x, y = None):
         return self.model(x, y)
@@ -81,11 +89,22 @@ class LightningGPT(pl.LightningModule):
         y_pred = torch.argmax(output, dim=-1)
 
         self.test_accuracy.update(y_pred[:,10:], y[:,10:])
-        # self.log("test_accuracy", accuracy, prog_bar=True)
+
+        y = y.cpu()
+        y_pred = y_pred.cpu()
+
+        for i in range(self.acc_n_bins):
+            start = i * self.acc_bin_range
+            end = (i+1) * self.acc_bin_range
+            self.test_acc_bins[i].update(y_pred[:,start:end], y[:,start:end])
 
     def on_test_epoch_end(self):
         self.log("test_acc", self.test_accuracy.compute())
         self.test_accuracy.reset()
+
+        for i in range(self.acc_n_bins):
+            self.log(f"test_acc_ply_{i * self.acc_bin_range+1}-{(i+1)*self.acc_bin_range}", self.test_acc_bins[i].compute())
+            self.test_acc_bins[i].reset()
         
 
     def configure_optimizers(self):

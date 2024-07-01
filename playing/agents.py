@@ -7,8 +7,10 @@ from tqdm import tqdm
 from transformers import AutoModel, GPT2LMHeadModel
 
 from data_process.tokenizers import FullMoveTokenizerNoEOS, SquareTokenizer
+from data_process.vocabulary import PieceMove
 from nanoGPT.model import GPT
-from playing.utils import board_to_piece_uci_moves, legal_moves_piece_uci
+from playing.utils import (board_to_piece_uci_moves, legal_moves_piece_uci,
+                           moves_piece_uci)
 
 
 class Agent:
@@ -55,6 +57,28 @@ class GPTAgent(Agent):
         best_legal_move = legal_moves[best_legal_move_index]
 
         return chess.Move.from_uci(best_legal_move[1:])
+    
+
+class GPTNocheckAgent(Agent):
+    def __init__(self, model: GPT) -> None:
+        super().__init__()
+        self.model = model
+        self.model.cpu()
+        self.tokenizer = FullMoveTokenizerNoEOS()
+
+    def play(self, board: chess.Board):
+        game_str = board_to_piece_uci_moves(board)
+        game_encoded = self.tokenizer.encode(game_str)
+
+        game_tensor = torch.tensor(game_encoded).unsqueeze(0)
+
+        model_output, _ = self.model(game_tensor)
+
+        moves_scores = model_output[0, -1, :].softmax(-1)
+        best_move_index = moves_scores.argmax().item()
+        best_move = self.tokenizer.decode_token(best_move_index)
+
+        return PieceMove.from_uci(best_move)
     
 
 class GPTBeamSearchAgent(Agent):
@@ -275,3 +299,28 @@ class NegaMaxMaterialAgent(NegaMaxAgent):
     
     def choose_from_best_moves(self, board, best_moves):
         return random.choice(best_moves)
+    
+
+class NegaMaxMaterialGPTAgent(NegaMaxMaterialAgent):
+    def __init__(self, model, depth=3) -> None:
+        super().__init__(depth)
+        self.model = model
+        self.model.cpu()
+        self.tokenizer = FullMoveTokenizerNoEOS()
+
+    def choose_from_best_moves(self, board, best_moves):
+        game_str = board_to_piece_uci_moves(board)
+        game_encoded = self.tokenizer.encode(game_str)
+
+        moves = moves_piece_uci(board, best_moves)
+        moves_encoded = self.tokenizer.encode(moves)[1:]
+
+        game_tensor = torch.tensor(game_encoded).unsqueeze(0)
+
+        model_output, _ = self.model(game_tensor)
+
+        moves_scores = model_output[0, -1, moves_encoded].softmax(-1)
+        best_move_index = moves_scores.argmax()
+        best_move = moves[best_move_index]
+
+        return chess.Move.from_uci(best_move[1:])
