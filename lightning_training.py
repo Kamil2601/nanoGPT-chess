@@ -147,8 +147,6 @@ class GamesDataset(Dataset):
         x = encoded_game[:-1]
         y = encoded_game[1:]
         return x, y
-        # return encoded_game
-
 
 class CutGamesDataset(Dataset):
     def __init__(self, games, cuts, max_game_length=300):
@@ -222,27 +220,8 @@ class WeightedGamesDataset(Dataset):
         white_elo = self.white_elo[idx].item()
         black_elo = self.black_elo[idx].item()
 
-        # print(white_elo, black_elo, result)
-
         weights[::2] = self.weights_config.compute_weight(white_elo, result)
         weights[1::2] = self.weights_config.compute_weight(black_elo, 1-result)
-
-        # white_elo_weight = 1
-        # black_elo_weight = 1
-
-        # if self.weights_config.use_elo:
-        #     white_elo_weight = white_elo * self.weights_config.elo_weight
-        #     black_elo_weight = black_elo * self.weights_config.elo_weight
-
-        # if result == 1:
-        #     weights[::2] = self.weights_config.win_weight * white_elo_weight
-        #     weights[1::2] = self.weights_config.loss_weight * black_elo_weight
-        # elif result == 0:
-        #     weights[::2] = self.weights_config.loss_weight * white_elo_weight
-        #     weights[1::2] = self.weights_config.win_weight * black_elo_weight
-        # else:
-        #     weights[::2] = self.weights_config.draw_weight * white_elo_weight
-        #     weights[1::2] = self.weights_config.draw_weight * black_elo_weight
 
         return x, y, weights
 
@@ -439,13 +418,6 @@ class WeightedGamesDataModule(pl.LightningDataModule):
             collate_fn=self.collate_fn,
         )
 
-        # return DataLoader(
-        #     self.train_dataset,
-        #     batch_size=self.batch_size,
-        #     shuffle=False,
-        #     num_workers=self.num_workers,
-        #     collate_fn=self.collate_fn,
-        # )
 
     def val_dataloader(self) -> Any:
         return DataLoader(
