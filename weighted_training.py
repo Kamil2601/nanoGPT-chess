@@ -4,14 +4,13 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 from datasets import Dataset
-
-from data_process.tokenizers import FullMoveTokenizerNoEOS
-from lightning_training import (LightningGPTWeighted, LightningGPT, WeightedGamesDataModule,
-                                WeightsConfig, GamesDataModule)
-from nanoGPT.model import GPTConfig
-
 from pytorch_lightning.callbacks import ModelCheckpoint
 
+from data_process.tokenizers import FullMoveTokenizerNoEOS
+from lightning_training import (GamesDataModule, LightningGPT,
+                                LightningGPTWeighted, WeightedGamesDataModule,
+                                WeightsConfig)
+from nanoGPT.model import GPTConfig
 
 tokenizer = FullMoveTokenizerNoEOS()
 

@@ -8,9 +8,14 @@ import chess
 import chess.pgn
 from tqdm import tqdm
 
-input_file_path = "./data/lichess_database/lichess_db_standard_rated_2023-11.pgn"
-output_file_path = "./data/lichess_database/lichess_db_standard_rated_2023-11.csv"
+from utils import material
+
+input_file_path = "./data/lichess_db_standard_rated_2024-12.pgn"
+output_file_path = "./data/lichess_db_standard_rated_2024-12.csv"
 num_proc = 15
+
+add_material_info = True
+
 
 
 def read_n_to_last_line(filename, n = 1):
@@ -52,6 +57,7 @@ def game_to_csv_row(game: chess.pgn.Game | str):
     # print(game_length)
 
     if game_length == 0:
+        # print('EMPTY GAME')
         return None
 
 
@@ -65,6 +71,10 @@ def game_to_csv_row(game: chess.pgn.Game | str):
         uci = move.uci()
         moves_uci.append(piece + uci)
         board.push(move)
+
+        if add_material_info:
+            material_white, material_black = material(board)
+            moves_uci += [str(material_white), str(material_black)]
 
     uci_str = " ".join(moves_uci)
 
@@ -126,7 +136,6 @@ def convert_file(input_file_path, output_file_path, skip_games = False):
                 games_to_process.append((str(game), game_index))
                 game_index += 1
 
-
             with ProcessPoolExecutor(max_workers=num_proc) as executor:
                 rows = executor.map(game_to_csv_row_with_index, games_to_process)
                     
@@ -141,14 +150,14 @@ def convert_file(input_file_path, output_file_path, skip_games = False):
 
 
 def main():
-    input_files_dir = Path("./data/lichess_elite_database")
-    input_files = input_files_dir.glob("*.pgn")
+    # input_files_dir = Path("./data/lichess_elite_database")
+    # input_files = input_files_dir.glob("*.pgn")
 
-    output_file = Path("./data/lichess_elite_database.csv")
+    # output_file = Path("./data/lichess_elite_database.csv")
 
-    for input_file_path in input_files:
-        print(f"Converting {input_file_path} to csv")
-        convert_file(input_file_path, output_file, skip_games=False)
+    # for input_file_path in input_files:
+    #     print(f"Converting {input_file_path} to csv")
+    convert_file(input_file_path, output_file_path, skip_games=False)
 
 
 if __name__ == "__main__":
