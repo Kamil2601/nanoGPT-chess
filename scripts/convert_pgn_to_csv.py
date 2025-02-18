@@ -8,7 +8,7 @@ import chess
 import chess.pgn
 from tqdm import tqdm
 
-from utils import material
+from scripts.utils import material
 
 input_file_path = "./data/lichess_db_standard_rated_2024-12.pgn"
 output_file_path = "./data/lichess_db_standard_rated_2024-12.csv"

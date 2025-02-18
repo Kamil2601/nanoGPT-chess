@@ -1,7 +1,7 @@
 import re
 from collections import OrderedDict
 
-from .vocabulary import SQUARE_VOCAB, legal_chess_moves
+from .vocabulary import ELO_VOCAB, SQUARE_VOCAB, legal_chess_moves
 
 
 class Tokenizer:
@@ -89,6 +89,13 @@ class FullMoveTokenizerNoEOS(FullMoveTokenizer):
             return [self.bos_token_id] + main_tokens
         
         return main_tokens
+    
+class FullMoveTokenizerWithElo(FullMoveTokenizerNoEOS):
+    def __init__(self):
+        super().__init__()
+        self.vocab += ELO_VOCAB
+        self.stoi = {move: i for i, move in enumerate(self.vocab)}
+        self.itos = {i: move for i, move in enumerate(self.vocab)}
 
 
 class SquareTokenizer(Tokenizer):
