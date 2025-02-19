@@ -85,7 +85,7 @@ SQUARE_VOCAB = [
 
 MATERIAL_VOCAB = [str(val) for val in range(61)]
 MATERIAL_PAIR_VOCAB = list(itertools.product(MATERIAL_VOCAB, MATERIAL_VOCAB))
-ELO_VOCAB = [str(val) for val in range(0, 4001, 100)]
+ELO_VOCAB = [str(val) for val in range(0, 4001, 100)] + ["[UNK_ELO]"]
 
 class PieceMove(chess.Move):
     def __init__(self, from_square, to_square, promotion=None, piece_type=None):

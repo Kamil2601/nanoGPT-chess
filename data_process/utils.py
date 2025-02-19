@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 import chess.pgn
+import pandas as pd
 
 
 def game_to_piece_uci(game: chess.pgn.Game | str):
@@ -38,3 +39,10 @@ def extract_pgn_games(path):
             games.extend(game_texts)
 
     return games
+
+def remove_material_tokens(piece_uci: pd.Series):
+    return piece_uci.str.replace(r" \d+", "", regex=True)
+
+def add_elo_token_to_games(piece_uci, white_elo, black_elo):
+    elo_piece_uci = (white_elo // 100 * 100).astype(str) + " " + (black_elo // 100 * 100).astype(str) + " " + piece_uci
+    return elo_piece_uci

@@ -332,7 +332,7 @@ class GamesDataModule(pl.LightningDataModule):
         self.max_game_length = max_game_length
 
         if tokenizer == None:
-            tokenizer = FullMoveTokenizer()
+            tokenizer = FullMoveTokenizerNoEOS()
 
         self.tokenizer = tokenizer
         self.collate_fn = collate_fn

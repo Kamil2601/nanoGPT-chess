@@ -97,6 +97,17 @@ class FullMoveTokenizerWithElo(FullMoveTokenizerNoEOS):
         self.stoi = {move: i for i, move in enumerate(self.vocab)}
         self.itos = {i: move for i, move in enumerate(self.vocab)}
 
+        self.unk_elo_token = self.vocab[-1]
+        self.unk_elo_token_id = self.vocab_size - 1
+
+    def encode(self, text: str, add_special_tokens = True) -> list:
+        main_tokens = [self.stoi[move] for move in self.tokenize(text)]
+
+        # if add_special_tokens:
+        #     return [self.bos_token_id] + main_tokens
+        
+        return main_tokens
+
 
 class SquareTokenizer(Tokenizer):
     def __init__(self):
