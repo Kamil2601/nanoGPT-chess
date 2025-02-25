@@ -43,7 +43,7 @@ class WeightsConfig:
 
 
 class LightningGPT(pl.LightningModule):
-    def __init__(self, config: GPTConfig, learning_rate=1e-3, weight_decay=0.0, tokenizer=None, acc_n_bins=30, acc_bin_range=10):
+    def __init__(self, config: GPTConfig, learning_rate=1e-3, weight_decay=0.0, tokenizer=None, test_acc_timesteps = False, acc_n_bins=30, acc_bin_range=10, test_start_token=10):
         super().__init__()
         self.model = GPT(config)
 
@@ -54,13 +54,18 @@ class LightningGPT(pl.LightningModule):
 
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
+        self.test_start_token = test_start_token
 
         self.test_accuracy = MulticlassAccuracy(tokenizer.vocab_size, ignore_index=0, average="micro")
 
-        self.test_acc_bins = [
-            MulticlassAccuracy(tokenizer.vocab_size, ignore_index=0, average="micro").cpu()
-            for _ in range(acc_n_bins)
-        ]
+        self.test_acc_timesteps = test_acc_timesteps
+
+
+        if self.test_acc_timesteps:
+            self.test_acc_bins = [
+                MulticlassAccuracy(tokenizer.vocab_size, ignore_index=0, average="micro").cpu()
+                for _ in range(acc_n_bins)
+            ]
 
         self.acc_n_bins = acc_n_bins
         self.acc_bin_range = acc_bin_range
@@ -88,23 +93,25 @@ class LightningGPT(pl.LightningModule):
         self.log("test_loss", loss, prog_bar=True)
         y_pred = torch.argmax(output, dim=-1)
 
-        self.test_accuracy.update(y_pred[:,10:], y[:,10:])
+        self.test_accuracy.update(y_pred[:,self.test_start_token:], y[:, self.test_start_token:])
 
         y = y.cpu()
         y_pred = y_pred.cpu()
 
-        for i in range(self.acc_n_bins):
-            start = i * self.acc_bin_range
-            end = (i+1) * self.acc_bin_range
-            self.test_acc_bins[i].update(y_pred[:,start:end], y[:,start:end])
+        if self.test_acc_timesteps:
+            for i in range(self.acc_n_bins):
+                start = i * self.acc_bin_range
+                end = (i+1) * self.acc_bin_range
+                self.test_acc_bins[i].update(y_pred[:,start:end], y[:,start:end])
 
     def on_test_epoch_end(self):
         self.log("test_acc", self.test_accuracy.compute())
         self.test_accuracy.reset()
 
-        for i in range(self.acc_n_bins):
-            self.log(f"test_acc_ply_{i * self.acc_bin_range+1}-{(i+1)*self.acc_bin_range}", self.test_acc_bins[i].compute())
-            self.test_acc_bins[i].reset()
+        if self.test_acc_timesteps:
+            for i in range(self.acc_n_bins):
+                self.log(f"test_acc_ply_{i * self.acc_bin_range+1}-{(i+1)*self.acc_bin_range}", self.test_acc_bins[i].compute())
+                self.test_acc_bins[i].reset()
         
 
     def configure_optimizers(self):
@@ -312,7 +319,8 @@ def collate_fn_with_info(data):
 class GamesDataModule(pl.LightningDataModule):
     def __init__(
         self,
-        games,
+        games = None,
+        test_games = None,
         weights_config=None,
         tokenizer=None,
         batch_size=64,
@@ -322,10 +330,6 @@ class GamesDataModule(pl.LightningDataModule):
         collate_fn = collate_fn
     ) -> None:
         super().__init__()
-        self.games = games
-        self.train_games, self.val_games = train_test_split(
-            games, test_size=test_size, random_state=42
-        )
 
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -337,14 +341,28 @@ class GamesDataModule(pl.LightningDataModule):
         self.tokenizer = tokenizer
         self.collate_fn = collate_fn
 
-        self.train_dataset = GamesDataset(self.train_games, tokenizer=tokenizer, max_game_length=max_game_length)
-        self.val_dataset = GamesDataset(self.val_games, tokenizer=tokenizer, max_game_length=max_game_length)
+        self.games = games
+        self.test_games = test_games
+
+        if games:
+            self.train_games, self.val_games = train_test_split(
+                games, test_size=test_size, random_state=42
+            )
+
+            self.train_dataset = GamesDataset(self.train_games, tokenizer=tokenizer, max_game_length=max_game_length)
+            self.val_dataset = GamesDataset(self.val_games, tokenizer=tokenizer, max_game_length=max_game_length)
+
+        if test_games:
+            self.test_dataset = GamesDataset(test_games, tokenizer=tokenizer, max_game_length=max_game_length)
 
     @property
     def block_size(self):
         return self.max_game_length + 1
 
     def train_dataloader(self) -> Any:
+        if not self.games:
+            return None
+
         batch_sampler = SimilarLengthSequenceBatchSampler(
             self.train_dataset.encoded_games,
             batch_size=self.batch_size,
@@ -359,6 +377,9 @@ class GamesDataModule(pl.LightningDataModule):
         )
 
     def val_dataloader(self) -> Any:
+        if not self.games:
+            return None
+        
         return DataLoader(
             self.val_dataset,
             batch_size=self.batch_size,
@@ -367,6 +388,18 @@ class GamesDataModule(pl.LightningDataModule):
             collate_fn=self.collate_fn,
         )
     
+    def test_dataloader(self) -> Any:
+        if not self.test_games:
+            return None
+
+        return DataLoader(
+            self.test_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            collate_fn=self.collate_fn,
+        )
+        
 
 class WeightedGamesDataModule(pl.LightningDataModule):
     def __init__(

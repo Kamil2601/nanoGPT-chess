@@ -75,7 +75,7 @@ games = add_elo_token_to_games(games, games_df.white_elo, games_df.black_elo)
 games = list(games)
 
 
-data_module = data_module = GamesDataModule(games, batch_size=batch_size, test_size=val_size, num_workers=num_workers)
+data_module = data_module = GamesDataModule(games, batch_size=batch_size, test_size=val_size, num_workers=num_workers, tokenizer=tokenizer)
 if checkpoint is None:
     pl_model = LightningGPT(model_config, learning_rate=learning_rate)
 else:
@@ -118,7 +118,7 @@ checkpoint_path = "./models/no_elo_training/"
 # checkpoint = "./models/standard_small_normal/epoch=3-step=374992.ckpt"
 checkpoint = None
 
-##################
+# ##################
 
 
 
@@ -134,7 +134,7 @@ games = tokenizer.unk_elo_token + " " + tokenizer.unk_elo_token + " " + games
 games = list(games)
 
 
-data_module = data_module = GamesDataModule(games, batch_size=batch_size, test_size=val_size, num_workers=num_workers)
+data_module = data_module = GamesDataModule(games, batch_size=batch_size, test_size=val_size, num_workers=num_workers, tokenizer=tokenizer)
 if checkpoint is None:
     pl_model = LightningGPT(model_config, learning_rate=learning_rate)
 else:
