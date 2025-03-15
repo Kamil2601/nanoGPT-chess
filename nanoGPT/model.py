@@ -171,7 +171,7 @@ class GPT(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx, targets=None, weights = None):
+    def forward(self, idx, targets=None, weights = None, ignore_first_n_targets=0):
         device = idx.device
         b, t = idx.size()
         assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
@@ -197,7 +197,10 @@ class GPT(nn.Module):
             logits = self.lm_head(x)
             # print("logits shape training:", logits.shape)
             if weights is None:
-                loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=0)
+                logits_cut = logits[:, ignore_first_n_targets:, :]
+                targets_cut = targets[:, ignore_first_n_targets:]
+                # print("cut logits shape training:", logits_cut.shape)
+                loss = F.cross_entropy(logits_cut.reshape(-1, logits_cut.size(-1)), targets_cut.reshape(-1), ignore_index=0)
             else:
                 loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=0, reduction='none')
                 loss = (loss * weights.view(-1)).sum() / weights.sum()
