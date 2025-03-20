@@ -56,14 +56,17 @@ data_path = "./data/csv/uniform_elo_distribution/train.csv"
 
 max_game_length = 302
 
-tensorboard_logger_version = 0 # SET TO NONE FOR FUTURE TRAININGS
+tensorboard_logger_version = None # SET TO NONE FOR FUTURE TRAININGS
 
 
-tensorboard_logger_name = "elo_training_2"
-checkpoint_path = "./models/elo_training_2/"
+tensorboard_logger_name = "adaptive_elo_training"
+checkpoint_path = "./models/adaptive_elo_training/"
+
+mask_elo_token = True
 
 # checkpoint = "./models/standard_small_normal/epoch=3-step=374992.ckpt"
-checkpoint = "./models/elo_training_2/epoch=4-step=625000.ckpt"
+# checkpoint = "./models/elo_training_2/epoch=4-step=625000.ckpt"
+checkpoint = None
 
 ##################
 
@@ -98,7 +101,7 @@ data_module = data_module = GamesDataModule(
     validation_size=val_size,
     num_workers=num_workers,
     tokenizer=tokenizer,
-    mask_elo_token=True,
+    mask_elo_token=mask_elo_token,
     max_game_length=max_game_length,
 )
 
@@ -122,7 +125,7 @@ checkpoint_callback = ModelCheckpoint(
 )
 
 tensorboard_logger = pl.loggers.TensorBoardLogger(
-    save_dir="./lightning_logs/elo_training_2", name=tensorboard_logger_name, version=tensorboard_logger_version
+    save_dir="./lightning_logs/", name=tensorboard_logger_name, version=tensorboard_logger_version
 )
 
 trainer = pl.Trainer(

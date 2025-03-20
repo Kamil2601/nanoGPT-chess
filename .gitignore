@@ -142,6 +142,7 @@ dmypy.json
 
 # saved models
 /models
+/models_old
 
 # lightning logs
 /lightning_logs
