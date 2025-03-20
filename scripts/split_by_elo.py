@@ -4,13 +4,16 @@ import os
 import pandas as pd
 from tqdm import tqdm
 
-input_files = ["./data/csv/train.csv", "./data/csv/train_copy.csv"]
-# input_files = glob.glob("./data/csv/*.csv")  # This will select all .csv files in the directory
+input_files = ["./data/csv/raw/lichess_elite_database-older.csv"]
+input_files = glob.glob("./data/csv/raw/*.csv")  # This will select all .csv files in the directory
 
-output_dir = "./data/csv/split_elo"
+output_dir = "./data/csv/new_split_elo"
 
 file_name_prefix = "elo"
 
+chunksize = 5_000_000  # Adjust based on available memory
+
+print(f"Splitting files: {input_files}")
 
 headers = ["index", "id", "date", "white_elo", "black_elo", "result", "ply", "ply_30s", "piece_uci"]
 
@@ -28,7 +31,6 @@ os.makedirs(output_dir, exist_ok=True)
 # Estimate total rows to set up the progress bar
 total_rows = sum(1 for _ in open(input_files[0]))
 
-chunksize = 200000  # Adjust based on available memory
 
 # Process each input file
 with tqdm(total=total_rows * len(input_files), desc="Processing", unit="rows") as pbar:

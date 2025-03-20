@@ -7,8 +7,7 @@ from pathlib import Path
 import chess
 import chess.pgn
 from tqdm import tqdm
-
-from scripts.utils import material
+from utils import material
 
 input_file_path = "./data/lichess_db_standard_rated_2024-12.pgn"
 output_file_path = "./data/lichess_db_standard_rated_2024-12.csv"
@@ -120,10 +119,11 @@ def convert_file(input_file_path, output_file_path, skip_games = False):
     with open(input_file_path, 'r') as input_file, open(output_file_path, 'a') as output_file:
         writer = csv.writer(output_file, delimiter=';')
 
-        for i in tqdm(range(game_index), desc="Skipping games"):
-            line = input_file.readline()
-            while not line.startswith("1."):
+        if skip_games:
+            for i in tqdm(range(game_index), desc="Skipping games"):
                 line = input_file.readline()
+                while not line.startswith("1."):
+                    line = input_file.readline()
 
         while True:
             games_to_process = []
@@ -150,14 +150,14 @@ def convert_file(input_file_path, output_file_path, skip_games = False):
 
 
 def main():
-    # input_files_dir = Path("./data/lichess_elite_database")
-    # input_files = input_files_dir.glob("*.pgn")
+    input_files_dir = Path("./data/pgn-elite-older")
+    input_files = input_files_dir.glob("*.pgn")
 
-    # output_file = Path("./data/lichess_elite_database.csv")
+    output_file = Path("./data/csv/raw/lichess_elite_database-older.csv")
 
-    # for input_file_path in input_files:
-    #     print(f"Converting {input_file_path} to csv")
-    convert_file(input_file_path, output_file_path, skip_games=False)
+    for input_file_path in input_files:
+        print(f"Converting {input_file_path} to csv")
+        convert_file(input_file_path, output_file, skip_games=False)
 
 
 if __name__ == "__main__":

@@ -94,7 +94,9 @@ class LightningGPT(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, y = batch
-        output, loss = self.model(x, y, ignore_first_n_targets=self.ignore_first_n_targets)
+        output, loss = self.model(
+            x, y, ignore_first_n_targets=self.ignore_first_n_targets
+        )
         self.log("train_loss", loss, prog_bar=True)
         return loss
 
@@ -151,7 +153,7 @@ class LightningGPTWeighted(LightningGPT):
 
 
 class GamesDataset(Dataset):
-    def __init__(self, games, tokenizer, max_game_length=300):
+    def __init__(self, games, tokenizer, max_game_length=300, mask_elo_token=False):
         self.games = games
         self.encoded_games = [tokenizer.encode(game) for game in games]
         self.encoded_games = [
@@ -159,6 +161,8 @@ class GamesDataset(Dataset):
         ]
         self.encoded_games = pa.array(self.encoded_games)
         self.max_game_length = max_game_length
+        self.tokenizer = tokenizer
+        self.mask_elo_token = mask_elo_token
 
     def __len__(self):
         return len(self.encoded_games)
@@ -170,14 +174,25 @@ class GamesDataset(Dataset):
     def __getitem__(self, idx):
         encoded_game = self.encoded_games[idx].as_py()
         encoded_game = torch.tensor(encoded_game, dtype=torch.long)
+
+        if self.mask_elo_token:
+            index_to_mask = np.random.choice([0, 1])
+            encoded_game[index_to_mask] = self.tokenizer.unk_elo_token_id
+
         x = encoded_game[:-1]
         y = encoded_game[1:]
         return x, y
 
 
 class CutGamesDataset(Dataset):
-    def __init__(self, games, cuts, max_game_length=300):
-        self.tokenizer = FullMoveTokenizerNoEOS()
+    def __init__(
+        self, games, cuts, tokenizer=None, max_game_length=300, mask_elo_token=False
+    ):
+        if tokenizer == None:
+            self.tokenizer = FullMoveTokenizerNoEOS()
+        else:
+            self.tokenizer = tokenizer
+
         self.games = games
         self.cuts = cuts
         self.games_cuts = zip(games, cuts)
@@ -191,6 +206,7 @@ class CutGamesDataset(Dataset):
 
         self.encoded_games = pa.array(self.encoded_games)
         self.max_game_length = max_game_length
+        self.mask_elo_token = mask_elo_token
 
     def __len__(self):
         return len(self.encoded_games)
@@ -198,6 +214,11 @@ class CutGamesDataset(Dataset):
     def __getitem__(self, idx):
         encoded_game = self.encoded_games[idx].as_py()
         encoded_game = torch.tensor(encoded_game, dtype=torch.long)
+
+        if self.mask_elo_token:
+            index_to_mask = np.random.choice([0, 1])
+            encoded_game[index_to_mask] = self.tokenizer.unk_elo_token_id
+
         x = encoded_game[:-1]
         y = encoded_game[1:]
         return x, y
@@ -339,20 +360,22 @@ class GamesDataModule(pl.LightningDataModule):
     def __init__(
         self,
         games=None,
+        cuts=None,
         test_games=None,
-        weights_config=None,
         tokenizer=None,
         batch_size=64,
         num_workers=12,
         max_game_length=300,
-        test_size=0.05,
+        validation_size=0.05,
         collate_fn=collate_fn,
+        mask_elo_token=False,
     ) -> None:
         super().__init__()
 
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.max_game_length = max_game_length
+        self.mask_elo_token = mask_elo_token
 
         if tokenizer == None:
             tokenizer = FullMoveTokenizerNoEOS()
@@ -363,22 +386,63 @@ class GamesDataModule(pl.LightningDataModule):
         self.games = games
         self.test_games = test_games
 
-        if games:
-            self.train_games, self.val_games = train_test_split(
-                games, test_size=test_size, random_state=42
-            )
+        if cuts is None:
+            if games:
+                self.train_games, self.val_games = train_test_split(
+                    games, test_size=validation_size, random_state=42
+                )
 
-            self.train_dataset = GamesDataset(
-                self.train_games, tokenizer=tokenizer, max_game_length=max_game_length
-            )
-            self.val_dataset = GamesDataset(
-                self.val_games, tokenizer=tokenizer, max_game_length=max_game_length
-            )
+                self.train_dataset = GamesDataset(
+                    self.train_games,
+                    tokenizer=tokenizer,
+                    max_game_length=max_game_length,
+                    mask_elo_token=mask_elo_token,
+                )
+                self.val_dataset = GamesDataset(
+                    self.val_games,
+                    tokenizer=tokenizer,
+                    max_game_length=max_game_length,
+                    mask_elo_token=mask_elo_token,
+                )
 
-        if test_games:
-            self.test_dataset = GamesDataset(
-                test_games, tokenizer=tokenizer, max_game_length=max_game_length
-            )
+            if test_games:
+                self.test_dataset = GamesDataset(
+                    test_games,
+                    tokenizer=tokenizer,
+                    max_game_length=max_game_length,
+                    mask_elo_token=mask_elo_token,
+                )
+
+        else:
+            if games:
+                self.train_games, self.val_games = train_test_split(
+                    games, test_size=validation_size, random_state=42
+                )
+
+                self.train_dataset = CutGamesDataset(
+                    self.train_games,
+                    cuts,
+                    tokenizer=tokenizer,
+                    max_game_length=max_game_length,
+                    mask_elo_token=mask_elo_token,
+                )
+
+                self.val_dataset = CutGamesDataset(
+                    self.val_games,
+                    cuts,
+                    tokenizer=tokenizer,
+                    max_game_length=max_game_length,
+                    mask_elo_token=mask_elo_token,
+                )
+
+            if test_games:
+                self.test_dataset = CutGamesDataset(
+                    test_games,
+                    cuts,
+                    tokenizer=tokenizer,
+                    max_game_length=max_game_length,
+                    mask_elo_token=mask_elo_token,
+                )
 
     @property
     def block_size(self):

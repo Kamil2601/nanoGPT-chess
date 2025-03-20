@@ -42,7 +42,7 @@ model_config_big = GPTConfig(
 
 ### SETTINGS ###
 
-val_size = 0.1
+val_size = 100_000
 model_config = model_config_big
 
 learning_rate = 0.0001
@@ -52,14 +52,18 @@ num_workers = 8
 
 ignore_first_n_targets = 1
 
-data_path = "./data/csv/train.csv"
+data_path = "./data/csv/uniform_elo_distribution/train.csv"
+
+max_game_length = 302
+
+tensorboard_logger_version = 0 # SET TO NONE FOR FUTURE TRAININGS
 
 
 tensorboard_logger_name = "elo_training_2"
 checkpoint_path = "./models/elo_training_2/"
 
 # checkpoint = "./models/standard_small_normal/epoch=3-step=374992.ckpt"
-checkpoint = None
+checkpoint = "./models/elo_training_2/epoch=4-step=625000.ckpt"
 
 ##################
 
@@ -79,26 +83,37 @@ headers = [
 ]
 
 games_df = pd.read_csv(data_path, delimiter=";", header=None, names=headers)
-games_df = games_df[["result", "white_elo", "black_elo", "piece_uci"]]
+games_df = games_df[["result", "white_elo", "black_elo", "piece_uci", "ply_30s"]]
 
 games = remove_material_tokens(games_df.piece_uci)
 games = add_elo_token_to_games(games, games_df.white_elo, games_df.black_elo)
 games = list(games)
+cuts = list(games_df.ply_30s)
 
 
 data_module = data_module = GamesDataModule(
     games,
+    cuts=cuts,
     batch_size=batch_size,
-    test_size=val_size,
+    validation_size=val_size,
     num_workers=num_workers,
     tokenizer=tokenizer,
+    mask_elo_token=True,
+    max_game_length=max_game_length,
 )
 
 if checkpoint is None:
-    pl_model = LightningGPT(model_config, learning_rate=learning_rate, ignore_first_n_targets=ignore_first_n_targets)
+    pl_model = LightningGPT(
+        model_config,
+        learning_rate=learning_rate,
+        ignore_first_n_targets=ignore_first_n_targets,
+    )
 else:
     pl_model = LightningGPT.load_from_checkpoint(
-        checkpoint, config=model_config, learning_rate=learning_rate, ignore_first_n_targets=ignore_first_n_targets
+        checkpoint,
+        config=model_config,
+        learning_rate=learning_rate,
+        ignore_first_n_targets=ignore_first_n_targets,
     )
 
 
@@ -107,17 +122,17 @@ checkpoint_callback = ModelCheckpoint(
 )
 
 tensorboard_logger = pl.loggers.TensorBoardLogger(
-    save_dir="./lightning_logs/elo_training_2", name=tensorboard_logger_name
+    save_dir="./lightning_logs/elo_training_2", name=tensorboard_logger_name, version=tensorboard_logger_version
 )
 
 trainer = pl.Trainer(
     accelerator="gpu",
-    max_epochs=5,
+    max_epochs=10,
     callbacks=[pl.callbacks.RichProgressBar(), checkpoint_callback],
     logger=tensorboard_logger,
     precision="bf16-mixed",
     # default_root_dir=
-    fast_dev_run=True,
+    # fast_dev_run=True,
 )
 
 torch.set_float32_matmul_precision("high")
@@ -128,60 +143,3 @@ trainer.fit(
     ckpt_path=checkpoint,
     # ckpt_path=ckpt_path
 )
-
-# ################# NO ELO TRAINING ###############################
-
-# tensorboard_logger_name = "no_elo_training"
-# checkpoint_path = "./models/no_elo_training/"
-
-# # checkpoint = "./models/standard_small_normal/epoch=3-step=374992.ckpt"
-# checkpoint = None
-
-# # ##################
-
-
-# # games_df = pd.read_csv(data_path)
-
-# # headers = ["index", "id", "date", "white_elo", "black_elo", "result", "ply", "ply_30s", "piece_uci"]
-
-# # games_df = pd.read_csv(data_path, delimiter=";", header=None, names=headers)
-# # games_df = games_df[['result', 'white_elo', 'black_elo', 'piece_uci']]
-
-# games = remove_material_tokens(games_df.piece_uci)
-# games = tokenizer.unk_elo_token + " " + tokenizer.unk_elo_token + " " + games
-# games = list(games)
-
-
-# data_module = data_module = GamesDataModule(games, batch_size=batch_size, test_size=val_size, num_workers=num_workers, tokenizer=tokenizer)
-# if checkpoint is None:
-#     pl_model = LightningGPT(model_config, learning_rate=learning_rate)
-# else:
-#     pl_model = LightningGPT.load_from_checkpoint(checkpoint, config=model_config, learning_rate=learning_rate)
-
-
-# checkpoint_callback = ModelCheckpoint(
-#     dirpath=checkpoint_path,
-#     save_top_k=-1,
-#     every_n_epochs=1
-# )
-
-# tensorboard_logger = pl.loggers.TensorBoardLogger(save_dir="./lightning_logs/no_elo_training", name=tensorboard_logger_name)
-
-# trainer = pl.Trainer(
-#     accelerator="gpu",
-#     max_epochs=5,
-#     callbacks=[pl.callbacks.RichProgressBar(), checkpoint_callback],
-#     logger=tensorboard_logger,
-#     precision="bf16-mixed",
-#     # default_root_dir=
-#     # fast_dev_run=True
-# )
-
-# torch.set_float32_matmul_precision("high")
-
-# trainer.fit(
-#     model=pl_model,
-#     datamodule=data_module,
-#     ckpt_path=checkpoint
-#     # ckpt_path=ckpt_path
-# )
