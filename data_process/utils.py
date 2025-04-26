@@ -43,6 +43,13 @@ def extract_pgn_games(path):
 def remove_material_tokens(piece_uci: pd.Series):
     return piece_uci.str.replace(r" \d+", "", regex=True)
 
+def join_material_tokens(piece_uci: pd.Series, replace_bigger_values: bool = True):
+    if replace_bigger_values:
+        piece_uci = piece_uci.str.replace(r'[45678]\d', '40', regex=True)
+    piece_uci = piece_uci.str.replace(r'(\S+)\s+(\d+)\s+(\d+)', r'\1 \2|\3', regex=True)
+
+    return piece_uci
+
 def add_elo_token_to_games(piece_uci, white_elo, black_elo):
     elo_piece_uci = (white_elo // 100 * 100).astype(str) + " " + (black_elo // 100 * 100).astype(str) + " " + piece_uci
     return elo_piece_uci

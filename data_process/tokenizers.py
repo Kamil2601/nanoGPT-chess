@@ -1,7 +1,8 @@
 import re
 from collections import OrderedDict
 
-from .vocabulary import ELO_VOCAB, SQUARE_VOCAB, legal_chess_moves
+from .vocabulary import (ELO_VOCAB, MATERIAL_PAIR_VOCAB, MATERIAL_VOCAB,
+                         SQUARE_VOCAB, legal_chess_moves)
 
 
 class Tokenizer:
@@ -99,6 +100,21 @@ class FullMoveTokenizerWithElo(FullMoveTokenizerNoEOS):
 
         self.unk_elo_token = self.vocab[-1]
         self.unk_elo_token_id = self.vocab_size - 1
+
+    def encode(self, text: str, add_special_tokens = True) -> list:
+        main_tokens = [self.stoi[move] for move in self.tokenize(text)]
+
+        # if add_special_tokens:
+        #     return [self.bos_token_id] + main_tokens
+        
+        return main_tokens
+    
+class FullMoveEloMaterialPairTokenizer(FullMoveTokenizerWithElo):
+    def __init__(self):
+        super().__init__()
+        self.vocab += MATERIAL_PAIR_VOCAB
+        self.stoi = {move: i for i, move in enumerate(self.vocab)}
+        self.itos = {i: move for i, move in enumerate(self.vocab)}
 
     def encode(self, text: str, add_special_tokens = True) -> list:
         main_tokens = [self.stoi[move] for move in self.tokenize(text)]

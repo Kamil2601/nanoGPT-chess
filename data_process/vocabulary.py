@@ -83,8 +83,8 @@ SQUARE_VOCAB = [
     "n",
 ]
 
-MATERIAL_VOCAB = [str(val) for val in range(61)]
-MATERIAL_PAIR_VOCAB = list(itertools.product(MATERIAL_VOCAB, MATERIAL_VOCAB))
+MATERIAL_VOCAB = [str(val) for val in range(41)]
+MATERIAL_PAIR_VOCAB = [f"{white}|{black}" for (white, black) in itertools.product(MATERIAL_VOCAB, MATERIAL_VOCAB)]
 ELO_VOCAB = [str(val) for val in range(0, 4001, 100)] + ["[UNK_ELO]"]
 
 class PieceMove(chess.Move):

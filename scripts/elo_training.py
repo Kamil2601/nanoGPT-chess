@@ -1,7 +1,6 @@
 import os
 import sys
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
@@ -11,15 +10,19 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from data_process.tokenizers import (FullMoveTokenizerNoEOS,
+from data_process.tokenizers import (FullMoveEloMaterialPairTokenizer,
+                                     FullMoveTokenizerNoEOS,
                                      FullMoveTokenizerWithElo)
-from data_process.utils import add_elo_token_to_games, remove_material_tokens
+from data_process.utils import (add_elo_token_to_games, join_material_tokens,
+                                remove_material_tokens)
 from lightning_training import (GamesDataModule, LightningGPT,
                                 LightningGPTWeighted, WeightedGamesDataModule,
                                 WeightsConfig)
 from nanoGPT.model import GPTConfig
 
-tokenizer = FullMoveTokenizerWithElo()
+### SETTINGS ###
+# tokenizer = FullMoveTokenizerWithElo()
+tokenizer = FullMoveEloMaterialPairTokenizer()
 
 model_config_small = GPTConfig(
     block_size=302,
@@ -39,10 +42,9 @@ model_config_big = GPTConfig(
     bias=False,
 )
 
-
-### SETTINGS ###
-
+train_size = 1_000_000
 val_size = 100_000
+
 model_config = model_config_big
 
 learning_rate = 0.0001
@@ -53,14 +55,15 @@ num_workers = 8
 ignore_first_n_targets = 1
 
 data_path = "./data/csv/uniform_elo_distribution/train.csv"
+# data_path = "./data/test.csv"
 
 max_game_length = 302
 
 tensorboard_logger_version = None # SET TO NONE FOR FUTURE TRAININGS
 
 
-tensorboard_logger_name = "adaptive_elo_training"
-checkpoint_path = "./models/adaptive_elo_training/"
+tensorboard_logger_name = "elo_with_material_pair"
+checkpoint_path = "./models/elo_with_material_pair/"
 
 mask_elo_token = True
 
@@ -68,10 +71,9 @@ mask_elo_token = True
 # checkpoint = "./models/elo_training_2/epoch=4-step=625000.ckpt"
 checkpoint = None
 
+
 ##################
 
-
-# games_df = pd.read_csv(data_path)
 
 headers = [
     "index",
@@ -85,11 +87,19 @@ headers = [
     "piece_uci",
 ]
 
-games_df = pd.read_csv(data_path, delimiter=";", header=None, names=headers)
+if train_size is not None:
+    games_df = pd.read_csv(data_path, delimiter=";", header=None, names=headers, nrows=train_size + val_size)
+else:
+    games_df = pd.read_csv(data_path, delimiter=";", header=None, names=headers)
+
+
 games_df = games_df[["result", "white_elo", "black_elo", "piece_uci", "ply_30s"]]
 
-games = remove_material_tokens(games_df.piece_uci)
+# games = remove_material_tokens(games_df.piece_uci)
+games = join_material_tokens(games_df.piece_uci, replace_bigger_values=True)
 games = add_elo_token_to_games(games, games_df.white_elo, games_df.black_elo)
+
+
 games = list(games)
 cuts = list(games_df.ply_30s)
 
@@ -130,7 +140,7 @@ tensorboard_logger = pl.loggers.TensorBoardLogger(
 
 trainer = pl.Trainer(
     accelerator="gpu",
-    max_epochs=10,
+    max_epochs=5,
     callbacks=[pl.callbacks.RichProgressBar(), checkpoint_callback],
     logger=tensorboard_logger,
     precision="bf16-mixed",
