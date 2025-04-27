@@ -24,8 +24,10 @@ from nanoGPT.model import GPTConfig
 # tokenizer = FullMoveTokenizerWithElo()
 tokenizer = FullMoveEloMaterialPairTokenizer()
 
+block_size = 604
+
 model_config_small = GPTConfig(
-    block_size=302,
+    block_size=block_size,
     vocab_size=tokenizer.vocab_size,
     n_layer=4,
     n_head=4,
@@ -34,7 +36,7 @@ model_config_small = GPTConfig(
 )
 
 model_config_big = GPTConfig(
-    block_size=302,
+    block_size=block_size,
     vocab_size=tokenizer.vocab_size,
     n_layer=8,
     n_head=8,
@@ -57,13 +59,13 @@ ignore_first_n_targets = 1
 data_path = "./data/csv/uniform_elo_distribution/train.csv"
 # data_path = "./data/test.csv"
 
-max_game_length = 302
+max_game_length = block_size
 
 tensorboard_logger_version = None # SET TO NONE FOR FUTURE TRAININGS
 
 
-tensorboard_logger_name = "elo_with_material_pair"
-checkpoint_path = "./models/elo_with_material_pair/"
+tensorboard_logger_name = "elo_base"
+checkpoint_path = "./models/elo_base/"
 
 mask_elo_token = True
 
@@ -95,8 +97,8 @@ else:
 
 games_df = games_df[["result", "white_elo", "black_elo", "piece_uci", "ply_30s"]]
 
-# games = remove_material_tokens(games_df.piece_uci)
-games = join_material_tokens(games_df.piece_uci, replace_bigger_values=True)
+games = remove_material_tokens(games_df.piece_uci)
+# games = join_material_tokens(games_df.piece_uci, replace_bigger_values=True)
 games = add_elo_token_to_games(games, games_df.white_elo, games_df.black_elo)
 
 
