@@ -44,7 +44,7 @@ model_config_big = GPTConfig(
     bias=False,
 )
 
-train_size = 1_000_000
+train_size = None
 val_size = 100_000
 
 model_config = model_config_big
@@ -65,8 +65,8 @@ max_game_length = block_size
 tensorboard_logger_version = None # SET TO NONE FOR FUTURE TRAININGS
 
 
-tensorboard_logger_name = "elo_material_pair_ignore_material_prediction"
-checkpoint_path = "./models/elo_material_pair_ignore_material_prediction/"
+tensorboard_logger_name = "elo_material_pair_ignore_material_prediction_2"
+checkpoint_path = "./models/elo_material_pair_ignore_material_prediction_2/"
 
 mask_elo_token = True
 
@@ -145,7 +145,7 @@ tensorboard_logger = pl.loggers.TensorBoardLogger(
 
 trainer = pl.Trainer(
     accelerator="gpu",
-    max_epochs=5,
+    max_epochs=10,
     callbacks=[pl.callbacks.RichProgressBar(), checkpoint_callback],
     logger=tensorboard_logger,
     precision="bf16-mixed",

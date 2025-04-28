@@ -95,22 +95,26 @@ class LightningGPT(pl.LightningModule):
     def forward_batch(self, batch):
         x, y = batch
         return self.model(x, y)
-
-    def training_step(self, batch, batch_idx):
+    
+    def forward_batch_training_validation(self, batch):
         x, y = batch
         output, loss = self.model(
             x, y, ignore_first_n_targets=self.training_ignore_first_n_targets, target_step=self.trainig_target_step
         )
+        return output, loss
+
+    def training_step(self, batch, batch_idx):
+        output, loss = self.forward_batch_training_validation(batch)
         self.log("train_loss", loss, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        output, loss = self.forward_batch(batch)
+        output, loss = self.forward_batch_training_validation(batch)
         self.log("val_loss", loss, prog_bar=True)
 
     def test_step(self, batch, batch_idx):
         x, y = batch
-        output, loss = self.forward_batch(batch)
+        output, loss = self.forward_batch_training_validation(batch)
 
         self.log("test_loss", loss, prog_bar=True)
         y_pred = torch.argmax(output, dim=-1)
