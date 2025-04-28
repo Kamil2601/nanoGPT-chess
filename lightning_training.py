@@ -53,7 +53,9 @@ class LightningGPT(pl.LightningModule):
         acc_n_bins=30,
         acc_bin_range=10,
         test_start_token=10,
-        ignore_first_n_targets=0,
+        test_token_step=1,
+        training_ignore_first_n_targets=0,
+        trainig_target_step=1,
     ):
         super().__init__()
         self.model = GPT(config)
@@ -66,7 +68,9 @@ class LightningGPT(pl.LightningModule):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.test_start_token = test_start_token
-        self.ignore_first_n_targets = ignore_first_n_targets
+        self.test_token_step = test_token_step
+        self.training_ignore_first_n_targets = training_ignore_first_n_targets
+        self.trainig_target_step = trainig_target_step
 
         self.test_accuracy = MulticlassAccuracy(
             tokenizer.vocab_size, ignore_index=0, average="micro"
@@ -95,7 +99,7 @@ class LightningGPT(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         output, loss = self.model(
-            x, y, ignore_first_n_targets=self.ignore_first_n_targets
+            x, y, ignore_first_n_targets=self.training_ignore_first_n_targets, target_step=self.trainig_target_step
         )
         self.log("train_loss", loss, prog_bar=True)
         return loss
@@ -112,7 +116,7 @@ class LightningGPT(pl.LightningModule):
         y_pred = torch.argmax(output, dim=-1)
 
         self.test_accuracy.update(
-            y_pred[:, self.test_start_token :], y[:, self.test_start_token :]
+            y_pred[:, self.test_start_token::self.test_token_step, ...], y[:, self.test_start_token::self.test_token_step, ...]
         )
 
         y = y.cpu()

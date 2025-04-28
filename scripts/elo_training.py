@@ -55,6 +55,7 @@ batch_size = 64
 num_workers = 8
 
 ignore_first_n_targets = 1
+training_target_step = 2 # 1 is for ignoring material prediction during loss calculation, otherwise should be 1
 
 data_path = "./data/csv/uniform_elo_distribution/train.csv"
 # data_path = "./data/test.csv"
@@ -64,8 +65,8 @@ max_game_length = block_size
 tensorboard_logger_version = None # SET TO NONE FOR FUTURE TRAININGS
 
 
-tensorboard_logger_name = "elo_base"
-checkpoint_path = "./models/elo_base/"
+tensorboard_logger_name = "elo_material_pair_ignore_material_prediction"
+checkpoint_path = "./models/elo_material_pair_ignore_material_prediction/"
 
 mask_elo_token = True
 
@@ -121,14 +122,16 @@ if checkpoint is None:
     pl_model = LightningGPT(
         model_config,
         learning_rate=learning_rate,
-        ignore_first_n_targets=ignore_first_n_targets,
+        training_ignore_first_n_targets=ignore_first_n_targets,
+        trainig_target_step=training_target_step
     )
 else:
     pl_model = LightningGPT.load_from_checkpoint(
         checkpoint,
         config=model_config,
         learning_rate=learning_rate,
-        ignore_first_n_targets=ignore_first_n_targets,
+        training_ignore_first_n_targets=ignore_first_n_targets,
+        training_target_step=training_target_step
     )
 
 
