@@ -58,8 +58,13 @@ full_training_size = {
     "val": 100_000,
 }
 
+small_training_max_epochs = 5
+full_training_max_epochs = 10
+
 train_size = small_training_size["train"]
 val_size = small_training_size["val"]
+max_epochs = small_training_max_epochs
+
 
 model_config = model_config_big
 
@@ -76,7 +81,7 @@ data_path = "./data/csv/uniform_elo_distribution/train.csv"
 
 max_game_length = block_size
 
-tensorboard_logger_version = 0 # SET TO NONE FOR FUTURE TRAININGS
+tensorboard_logger_version = None # SET TO NONE FOR FUTURE TRAININGS
 
 
 tensorboard_logger_name = "elo_material_ignore_material_prediction"
@@ -84,8 +89,8 @@ checkpoint_path = f"./models/small_training/{tensorboard_logger_name}"
 
 mask_elo_token = True
 
-checkpoint = "./models/elo_material_pair_ignore_material_prediction_full/epoch=8-step=1125000.ckpt"
-# checkpoint = None
+# checkpoint = "./models/elo_material_pair_ignore_material_prediction_full/epoch=8-step=1125000.ckpt"
+checkpoint = None
 
 
 ##################
@@ -158,7 +163,7 @@ tensorboard_logger = pl.loggers.TensorBoardLogger(
 
 trainer = pl.Trainer(
     accelerator="gpu",
-    max_epochs=10,
+    max_epochs=max_epochs,
     callbacks=[pl.callbacks.RichProgressBar(), checkpoint_callback],
     logger=tensorboard_logger,
     precision="bf16-mixed",

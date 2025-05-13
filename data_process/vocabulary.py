@@ -84,6 +84,7 @@ SQUARE_VOCAB = [
 ]
 
 MATERIAL_VOCAB = [str(val) for val in range(41)]
+MATERIAL_VOCAB_EXTENDED = [str(val) for val in range(104)]
 MATERIAL_PAIR_VOCAB = [f"{white}|{black}" for (white, black) in itertools.product(MATERIAL_VOCAB, MATERIAL_VOCAB)]
 ELO_VOCAB = [str(val) for val in range(0, 4001, 100)] + ["[UNK_ELO]"]
 

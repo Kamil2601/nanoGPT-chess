@@ -2,7 +2,8 @@ import re
 from collections import OrderedDict
 
 from .vocabulary import (ELO_VOCAB, MATERIAL_PAIR_VOCAB, MATERIAL_VOCAB,
-                         SQUARE_VOCAB, legal_chess_moves)
+                         MATERIAL_VOCAB_EXTENDED, SQUARE_VOCAB,
+                         legal_chess_moves)
 
 
 class Tokenizer:
@@ -127,7 +128,7 @@ class FullMoveEloMaterialPairTokenizer(FullMoveTokenizerWithElo):
 class FullMoveEloMaterialTokenizer(FullMoveTokenizerWithElo):
     def __init__(self):
         super().__init__()
-        self.vocab += MATERIAL_VOCAB
+        self.vocab += MATERIAL_VOCAB_EXTENDED
         self.stoi = {move: i for i, move in enumerate(self.vocab)}
         self.itos = {i: move for i, move in enumerate(self.vocab)}
 
