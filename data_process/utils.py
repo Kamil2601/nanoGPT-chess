@@ -45,7 +45,7 @@ def remove_material_tokens(piece_uci: pd.Series):
 
 def join_material_tokens(piece_uci: pd.Series, replace_bigger_values: bool = True):
     if replace_bigger_values:
-        piece_uci = piece_uci.str.replace(r'[45678]\d', '40', regex=True)
+        piece_uci = piece_uci.str.replace(r'([456789]|10)\d', '40', regex=True)
     piece_uci = piece_uci.str.replace(r'(\S+)\s+(\d+)\s+(\d+)', r'\1 \2|\3', regex=True)
 
     return piece_uci

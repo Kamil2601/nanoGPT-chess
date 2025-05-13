@@ -55,24 +55,23 @@ batch_size = 64
 num_workers = 8
 
 ignore_first_n_targets = 1
-training_target_step = 2 # 1 is for ignoring material prediction during loss calculation, otherwise should be 1
+training_target_step = 2 # 2 is for ignoring material prediction during loss calculation, otherwise should be 1
 
 data_path = "./data/csv/uniform_elo_distribution/train.csv"
 # data_path = "./data/test.csv"
 
 max_game_length = block_size
 
-tensorboard_logger_version = None # SET TO NONE FOR FUTURE TRAININGS
+tensorboard_logger_version = 0 # SET TO NONE FOR FUTURE TRAININGS
 
 
-tensorboard_logger_name = "elo_material_pair_ignore_material_prediction_2"
-checkpoint_path = "./models/elo_material_pair_ignore_material_prediction_2/"
+tensorboard_logger_name = "elo_material_pair_ignore_material_prediction_full"
+checkpoint_path = f"./models/{tensorboard_logger_name}"
 
 mask_elo_token = True
 
-# checkpoint = "./models/standard_small_normal/epoch=3-step=374992.ckpt"
-# checkpoint = "./models/elo_training_2/epoch=4-step=625000.ckpt"
-checkpoint = None
+checkpoint = "./models/elo_material_pair_ignore_material_prediction_full/epoch=8-step=1125000.ckpt"
+# checkpoint = None
 
 
 ##################
@@ -98,8 +97,8 @@ else:
 
 games_df = games_df[["result", "white_elo", "black_elo", "piece_uci", "ply_30s"]]
 
-games = remove_material_tokens(games_df.piece_uci)
-# games = join_material_tokens(games_df.piece_uci, replace_bigger_values=True)
+# games = remove_material_tokens(games_df.piece_uci)
+games = join_material_tokens(games_df.piece_uci, replace_bigger_values=True)
 games = add_elo_token_to_games(games, games_df.white_elo, games_df.black_elo)
 
 
@@ -109,7 +108,7 @@ cuts = list(games_df.ply_30s)
 
 data_module = data_module = GamesDataModule(
     games,
-    cuts=cuts,
+    # cuts=cuts,
     batch_size=batch_size,
     validation_size=val_size,
     num_workers=num_workers,
@@ -159,5 +158,4 @@ trainer.fit(
     model=pl_model,
     datamodule=data_module,
     ckpt_path=checkpoint,
-    # ckpt_path=ckpt_path
 )
