@@ -48,8 +48,18 @@ model_config_big = GPTConfig(
     bias=False,
 )
 
-train_size = 100_000
-val_size = 10_000
+small_training_size = {
+    "train": 1_000_000,
+    "val": 10_000,
+}
+
+full_training_size = {
+    "train": None,
+    "val": 100_000,
+}
+
+train_size = small_training_size["train"]
+val_size = small_training_size["val"]
 
 model_config = model_config_big
 
