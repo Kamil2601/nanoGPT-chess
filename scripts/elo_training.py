@@ -11,9 +11,11 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from data_process.tokenizers import (FullMoveEloMaterialPairTokenizer,
+                                     FullMoveEloMaterialTokenizer,
                                      FullMoveTokenizerNoEOS,
                                      FullMoveTokenizerWithElo)
 from data_process.utils import (add_elo_token_to_games, join_material_tokens,
+                                remove_last_player_material_token,
                                 remove_material_tokens)
 from lightning_training import (GamesDataModule, LightningGPT,
                                 LightningGPTWeighted, WeightedGamesDataModule,
@@ -21,8 +23,10 @@ from lightning_training import (GamesDataModule, LightningGPT,
 from nanoGPT.model import GPTConfig
 
 ### SETTINGS ###
+
 # tokenizer = FullMoveTokenizerWithElo()
-tokenizer = FullMoveEloMaterialPairTokenizer()
+# tokenizer = FullMoveEloMaterialPairTokenizer()
+tokenizer = FullMoveEloMaterialTokenizer()
 
 block_size = 604
 
@@ -44,8 +48,8 @@ model_config_big = GPTConfig(
     bias=False,
 )
 
-train_size = None
-val_size = 100_000
+train_size = 100_000
+val_size = 10_000
 
 model_config = model_config_big
 
@@ -65,8 +69,8 @@ max_game_length = block_size
 tensorboard_logger_version = 0 # SET TO NONE FOR FUTURE TRAININGS
 
 
-tensorboard_logger_name = "elo_material_pair_ignore_material_prediction_full"
-checkpoint_path = f"./models/{tensorboard_logger_name}"
+tensorboard_logger_name = "elo_material_ignore_material_prediction"
+checkpoint_path = f"./models/small_training/{tensorboard_logger_name}"
 
 mask_elo_token = True
 
@@ -98,9 +102,9 @@ else:
 games_df = games_df[["result", "white_elo", "black_elo", "piece_uci", "ply_30s"]]
 
 # games = remove_material_tokens(games_df.piece_uci)
-games = join_material_tokens(games_df.piece_uci, replace_bigger_values=True)
-games = add_elo_token_to_games(games, games_df.white_elo, games_df.black_elo)
-
+# games = join_material_tokens(games_df.piece_uci, replace_bigger_values=True)
+# games = add_elo_token_to_games(games, games_df.white_elo, games_df.black_elo)
+games = remove_last_player_material_token(games_df.piece_uci)
 
 games = list(games)
 cuts = list(games_df.ply_30s)

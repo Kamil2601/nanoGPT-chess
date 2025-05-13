@@ -40,8 +40,10 @@ def extract_pgn_games(path):
 
     return games
 
+
 def remove_material_tokens(piece_uci: pd.Series):
     return piece_uci.str.replace(r" \d+", "", regex=True)
+
 
 def join_material_tokens(piece_uci: pd.Series, replace_bigger_values: bool = True):
     if replace_bigger_values:
@@ -50,6 +52,24 @@ def join_material_tokens(piece_uci: pd.Series, replace_bigger_values: bool = Tru
 
     return piece_uci
 
+
 def add_elo_token_to_games(piece_uci, white_elo, black_elo):
-    elo_piece_uci = (white_elo // 100 * 100).astype(str) + " " + (black_elo // 100 * 100).astype(str) + " " + piece_uci
+    elo_piece_uci = (
+        (white_elo // 100 * 100).astype(str)
+        + " "
+        + (black_elo // 100 * 100).astype(str)
+        + " "
+        + piece_uci
+    )
     return elo_piece_uci
+
+
+def remove_last_player_material_token(piece_uci: pd.Series):
+    def filter_func(uci):
+        uci = uci.split(" ")
+        uci = [token for i, token in enumerate(uci) if i % 6 in [0, 2, 3, 4]]
+        uci = " ".join(uci)
+        return uci
+
+    piece_uci = piece_uci.apply(filter_func)
+    return piece_uci

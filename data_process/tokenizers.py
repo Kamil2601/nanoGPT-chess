@@ -112,6 +112,21 @@ class FullMoveTokenizerWithElo(FullMoveTokenizerNoEOS):
 class FullMoveEloMaterialPairTokenizer(FullMoveTokenizerWithElo):
     def __init__(self):
         super().__init__()
+        self.vocab += MATERIAL_VOCAB
+        self.stoi = {move: i for i, move in enumerate(self.vocab)}
+        self.itos = {i: move for i, move in enumerate(self.vocab)}
+
+    def encode(self, text: str, add_special_tokens = True) -> list:
+        main_tokens = [self.stoi[move] for move in self.tokenize(text)]
+
+        # if add_special_tokens:
+        #     return [self.bos_token_id] + main_tokens
+        
+        return main_tokens
+    
+class FullMoveEloMaterialTokenizer(FullMoveTokenizerWithElo):
+    def __init__(self):
+        super().__init__()
         self.vocab += MATERIAL_PAIR_VOCAB
         self.stoi = {move: i for i, move in enumerate(self.vocab)}
         self.itos = {i: move for i, move in enumerate(self.vocab)}
