@@ -48,7 +48,7 @@ class GPTAgent(Agent):
         game_encoded = self.tokenizer.encode(game_str)
 
         legal_moves = legal_moves_piece_uci(board)
-        legal_moves_encoded = self.tokenizer.encode(legal_moves)
+        legal_moves_encoded = self.tokenizer.encode(legal_moves, add_special_tokens=False)
 
         game_tensor = torch.tensor(game_encoded).unsqueeze(0)
 
@@ -326,7 +326,7 @@ class NegaMaxMaterialGPTAgent(NegaMaxMaterialAgent):
         game_encoded = self.tokenizer.encode(game_str)
 
         moves = moves_piece_uci(board, best_moves)
-        moves_encoded = self.tokenizer.encode(moves)[1:]
+        moves_encoded = self.tokenizer.encode(moves, add_special_tokens=False)
 
         game_tensor = torch.tensor(game_encoded).unsqueeze(0)
 
@@ -337,3 +337,4 @@ class NegaMaxMaterialGPTAgent(NegaMaxMaterialAgent):
         best_move = moves[best_move_index]
 
         return chess.Move.from_uci(best_move[1:])
+    
