@@ -9,10 +9,12 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset, Sampler
 from torchmetrics.classification import MulticlassAccuracy
 
-from data_process.tokenizers import FullMoveTokenizer, FullMoveTokenizerNoEOS
+from data_process.tokenizers import (FullMoveTokenizer, FullMoveTokenizerNoEOS,
+                                     Tokenizer)
 from nanoGPT.model import GPT, GPTConfig
 
 ### PL MODELS ###
+
 
 @dataclass
 class WeightsConfig:
@@ -56,6 +58,7 @@ class LightningGPT(pl.LightningModule):
         test_token_step=1,
         training_ignore_first_n_targets=0,
         trainig_target_step=1,
+        masked_elo_test=False,
     ):
         super().__init__()
         self.model = GPT(config)
@@ -71,6 +74,7 @@ class LightningGPT(pl.LightningModule):
         self.test_token_step = test_token_step
         self.training_ignore_first_n_targets = training_ignore_first_n_targets
         self.trainig_target_step = trainig_target_step
+        self.masked_elo_test = masked_elo_test
 
         self.test_accuracy = MulticlassAccuracy(
             tokenizer.vocab_size, ignore_index=0, average="micro"
@@ -95,11 +99,24 @@ class LightningGPT(pl.LightningModule):
     def forward_batch(self, batch):
         x, y = batch
         return self.model(x, y)
-    
+
     def forward_batch_training_validation(self, batch):
         x, y = batch
         output, loss = self.model(
-            x, y, ignore_first_n_targets=self.training_ignore_first_n_targets, target_step=self.trainig_target_step
+            x,
+            y,
+            ignore_first_n_targets=self.training_ignore_first_n_targets,
+            target_step=self.trainig_target_step,
+        )
+        return output, loss
+
+    def forward_batch_test(self, batch):
+        x, y = batch
+        output, loss = self.model(
+            x,
+            y,
+            ignore_first_n_targets=self.test_start_token,
+            target_step=self.test_token_step,
         )
         return output, loss
 
@@ -113,42 +130,81 @@ class LightningGPT(pl.LightningModule):
         self.log("val_loss", loss, prog_bar=True)
 
     def test_step(self, batch, batch_idx):
-        x, y = batch
-        output, loss = self.forward_batch_training_validation(batch)
+        if self.masked_elo_test:
+            self.masked_elo_test_step(batch)
+        else:
+            self.standard_test_step(batch)
 
-        self.log("test_loss", loss, prog_bar=True)
-        y_pred = torch.argmax(output, dim=-1)
-
-        self.test_accuracy.update(
-            y_pred[:, self.test_start_token::self.test_token_step, ...], y[:, self.test_start_token::self.test_token_step, ...]
-        )
-
-        y = y.cpu()
-        y_pred = y_pred.cpu()
-
-        if self.test_acc_timesteps:
-            for i in range(self.acc_n_bins):
-                start = i * self.acc_bin_range
-                end = (i + 1) * self.acc_bin_range
-                self.test_acc_bins[i].update(y_pred[:, start:end], y[:, start:end])
+        # if self.test_acc_timesteps:
+        #     for i in range(self.acc_n_bins):
+        #         start = i * self.acc_bin_range
+        #         end = (i + 1) * self.acc_bin_range
+        #         self.test_acc_bins[i].update(y_pred[:, start:end], y[:, start:end])
 
     def on_test_epoch_end(self):
         self.log("test_acc", self.test_accuracy.compute())
         self.test_accuracy.reset()
 
-        if self.test_acc_timesteps:
-            for i in range(self.acc_n_bins):
-                self.log(
-                    f"test_acc_ply_{i * self.acc_bin_range+1}-{(i+1)*self.acc_bin_range}",
-                    self.test_acc_bins[i].compute(),
-                )
-                self.test_acc_bins[i].reset()
+        # if self.test_acc_timesteps:
+        #     for i in range(self.acc_n_bins):
+        #         self.log(
+        #             f"test_acc_ply_{i * self.acc_bin_range+1}-{(i+1)*self.acc_bin_range}",
+        #             self.test_acc_bins[i].compute(),
+        #         )
+        #         self.test_acc_bins[i].reset()
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
             self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay
         )
         return optimizer
+    
+    def standard_test_step(self, batch):
+        x, y = batch
+
+        output, loss = self.forward_batch_test(batch)
+
+        self.log("test_loss", loss, prog_bar=True)
+        y_pred = torch.argmax(output, dim=-1)
+
+        self.test_accuracy.update(
+            y_pred[:, self.test_start_token :: self.test_token_step, ...],
+            y[:, self.test_start_token :: self.test_token_step, ...],
+        )
+
+    def masked_elo_test_step(self, batch):
+        x, y = batch
+        x_black_elo_masked = x.clone()
+        x_black_elo_masked[:, 1, ...] = self.tokenizer.unk_elo_token_id
+
+        x_white_elo_masked = x.clone()
+        x_white_elo_masked[:, 0, ...] = self.tokenizer.unk_elo_token_id
+
+        batch_black_elo_masked = (x_black_elo_masked, y)
+        batch_white_elo_masked = (x_white_elo_masked, y)
+
+        output_black_elo_masked, _  = self.forward_batch_test(batch_black_elo_masked)
+        output_white_elo_masked, _  = self.forward_batch_test(batch_white_elo_masked)
+ 
+        y_pred_black_elo_masked = torch.argmax(output_black_elo_masked, dim=-1)
+        y_pred_white_elo_masked = torch.argmax(output_white_elo_masked, dim=-1)
+
+        predicted_white_moves = y_pred_black_elo_masked[:, self.test_start_token :: self.test_token_step, ...][:, ::2, ...]
+        predicted_black_moves = y_pred_white_elo_masked[:, self.test_start_token :: self.test_token_step, ...][:, 1::2, ...]
+
+        target_white_moves = y[:, self.test_start_token :: self.test_token_step, ...][:, ::2, ...]
+        target_black_moves = y[:, self.test_start_token :: self.test_token_step, ...][:, 1::2, ...]
+
+
+        self.test_accuracy.update(
+            predicted_white_moves,
+            target_white_moves,
+        )
+
+        self.test_accuracy.update(
+            predicted_black_moves,
+            target_black_moves,
+        )
 
 
 class LightningGPTWeighted(LightningGPT):

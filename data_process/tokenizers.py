@@ -113,7 +113,7 @@ class FullMoveTokenizerWithElo(FullMoveTokenizerNoEOS):
 class FullMoveEloMaterialPairTokenizer(FullMoveTokenizerWithElo):
     def __init__(self):
         super().__init__()
-        self.vocab += MATERIAL_VOCAB
+        self.vocab += MATERIAL_PAIR_VOCAB
         self.stoi = {move: i for i, move in enumerate(self.vocab)}
         self.itos = {i: move for i, move in enumerate(self.vocab)}
 
