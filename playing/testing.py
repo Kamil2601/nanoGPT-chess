@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from data_process.vocabulary import PieceMove
 from playing.agents import Agent, RandomAgent
-from playing.utils import piece_uci_to_board
+from playing.utils import material, material_balance, piece_uci_to_board
 
 
 def play_game(white: Agent, black: Agent, n_moves=40, verbose=False, board = None):
@@ -228,28 +228,4 @@ def play_against_agent(agent, color=chess.WHITE):
 
 
 
-def material(board):
-    white = board.occupied_co[chess.WHITE]
-    black = board.occupied_co[chess.BLACK]
-    white_material = (
-        chess.popcount(white & board.pawns) +
-        3 * chess.popcount(white & board.knights) +
-        3 * chess.popcount(white & board.bishops) +
-        5 * chess.popcount(white & board.rooks) +
-        9 * chess.popcount(white & board.queens)
-    )
 
-    black_material = (
-        chess.popcount(black & board.pawns) +
-        3 * chess.popcount(black & board.knights) +
-        3 * chess.popcount(black & board.bishops) +
-        5 * chess.popcount(black & board.rooks) +
-        9 * chess.popcount(black & board.queens)
-    )
-
-    return white_material, black_material
-
-
-def material_balance(board):
-    white, black = material(board)
-    return white - black

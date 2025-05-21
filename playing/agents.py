@@ -6,11 +6,13 @@ import torch
 from tqdm import tqdm
 from transformers import AutoModel, GPT2LMHeadModel
 
-from data_process.tokenizers import FullMoveTokenizerNoEOS, SquareTokenizer
+from data_process.tokenizers import (FullMoveEloMaterialTokenizer,
+                                     FullMoveTokenizerNoEOS,
+                                     FullMoveTokenizerWithElo, SquareTokenizer)
 from data_process.vocabulary import PieceMove
 from nanoGPT.model import GPT
 from playing.utils import (board_to_piece_uci_moves, legal_moves_piece_uci,
-                           moves_piece_uci)
+                           material, material_balance, moves_piece_uci)
 
 
 class Agent:
@@ -46,7 +48,7 @@ class GPTAgent(Agent):
         game_encoded = self.tokenizer.encode(game_str)
 
         legal_moves = legal_moves_piece_uci(board)
-        legal_moves_encoded = self.tokenizer.encode(legal_moves)[1:]
+        legal_moves_encoded = self.tokenizer.encode(legal_moves)
 
         game_tensor = torch.tensor(game_encoded).unsqueeze(0)
 
@@ -57,7 +59,46 @@ class GPTAgent(Agent):
         best_legal_move = legal_moves[best_legal_move_index]
 
         return chess.Move.from_uci(best_legal_move[1:])
+
+class GPTEloAgent(Agent):
+    def __init__(self, model: GPT, model_elo, use_material_tokens = False) -> None:
+        super().__init__()
+        self.model = model
+        self.model.cpu()
+        self.use_material_tokens = use_material_tokens
+        self.model_elo = str(model_elo // 100 * 100)
+        
+        if use_material_tokens:
+            self.tokenizer = FullMoveEloMaterialTokenizer()
+        else:
+            self.tokenizer = FullMoveTokenizerWithElo()
+
+    def play(self, board: chess.Board):
+        game_str = board_to_piece_uci_moves(board, include_material=self.use_material_tokens)
+
+        if board.turn == chess.WHITE:
+            game_str = [self.model_elo, self.tokenizer.unk_elo_token] + game_str
+        else:
+            game_str = [self.tokenizer.unk_elo_token, self.model_elo] + game_str
+
+        game_encoded = self.tokenizer.encode(game_str)
+
+        legal_moves = legal_moves_piece_uci(board)
+        legal_moves_encoded = self.tokenizer.encode(legal_moves)
+
+
+        with torch.inference_mode():
+            game_tensor = torch.tensor(game_encoded).unsqueeze(0)
+
+            model_output, _ = self.model(game_tensor)
+
+            legal_moves_scores = model_output[0, -1, legal_moves_encoded].softmax(-1)
+            best_legal_move_index = legal_moves_scores.argmax().item()
+            best_legal_move = legal_moves[best_legal_move_index]
+
+            return chess.Move.from_uci(best_legal_move[1:])
     
+
 
 class GPTNocheckAgent(Agent):
     def __init__(self, model: GPT) -> None:
@@ -209,34 +250,6 @@ class GPTSquareTokenAgent(Agent):
 
 ### MINMAX AGENTS ###
 
-def material(board):
-    white = board.occupied_co[chess.WHITE]
-    black = board.occupied_co[chess.BLACK]
-    white_material = (
-        chess.popcount(white & board.pawns) +
-        3 * chess.popcount(white & board.knights) +
-        3 * chess.popcount(white & board.bishops) +
-        5 * chess.popcount(white & board.rooks) +
-        9 * chess.popcount(white & board.queens)
-    )
-
-    black_material = (
-        chess.popcount(black & board.pawns) +
-        3 * chess.popcount(black & board.knights) +
-        3 * chess.popcount(black & board.bishops) +
-        5 * chess.popcount(black & board.rooks) +
-        9 * chess.popcount(black & board.queens)
-    )
-
-    return white_material, black_material
-
-def material_difference(board):
-    if board.is_checkmate():
-        return -float('inf') if board.turn == chess.WHITE else float('inf')
-    white_material, black_material = material(board)
-    return white_material - black_material
-
-
 class NegaMaxAgent(Agent):
     def __init__(self, depth = 3) -> None:
         super().__init__()
@@ -295,7 +308,7 @@ class NegaMaxMaterialAgent(NegaMaxAgent):
 
     def evaluate_board(self, board):
         color = 1 if board.turn == chess.WHITE else -1
-        return color * material_difference(board)
+        return color * material_balance(board)
     
     def choose_from_best_moves(self, board, best_moves):
         return random.choice(best_moves)
