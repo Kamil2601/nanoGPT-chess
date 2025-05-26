@@ -2,8 +2,8 @@ import re
 from collections import OrderedDict
 
 from .vocabulary import (ELO_VOCAB, MATERIAL_PAIR_VOCAB, MATERIAL_VOCAB,
-                         MATERIAL_VOCAB_EXTENDED, SQUARE_VOCAB,
-                         legal_chess_moves)
+                         MATERIAL_VOCAB_EXTENDED, PIECE_COUNT_VOCAB,
+                         SQUARE_VOCAB, legal_chess_moves)
 
 
 class Tokenizer:
@@ -76,12 +76,10 @@ class FullMoveTokenizerNoEOS(FullMoveTokenizer):
     def __init__(self) -> None:
         super().__init__()
 
-    def tokenize(self, moves, cut = -1) -> list:
+    def tokenize(self, moves) -> list:
         if type(moves) == str:
             moves = moves.split()
     
-        if cut >= 0:
-            return moves[:cut]
         return moves
 
     def encode(self, text: str, add_special_tokens = True) -> list:
@@ -105,9 +103,6 @@ class FullMoveTokenizerWithElo(FullMoveTokenizerNoEOS):
     def encode(self, text: str, add_special_tokens = True) -> list:
         main_tokens = [self.stoi[move] for move in self.tokenize(text)]
 
-        # if add_special_tokens:
-        #     return [self.bos_token_id] + main_tokens
-        
         return main_tokens
     
 class FullMoveEloMaterialPairTokenizer(FullMoveTokenizerWithElo):
@@ -119,9 +114,6 @@ class FullMoveEloMaterialPairTokenizer(FullMoveTokenizerWithElo):
 
     def encode(self, text: str, add_special_tokens = True) -> list:
         main_tokens = [self.stoi[move] for move in self.tokenize(text)]
-
-        # if add_special_tokens:
-        #     return [self.bos_token_id] + main_tokens
         
         return main_tokens
     
@@ -134,9 +126,18 @@ class FullMoveEloMaterialTokenizer(FullMoveTokenizerWithElo):
 
     def encode(self, text: str, add_special_tokens = True) -> list:
         main_tokens = [self.stoi[move] for move in self.tokenize(text)]
+        
+        return main_tokens
+    
+class FullMoveEloPieceCountTokenizer(FullMoveTokenizerWithElo):
+    def __init__(self):
+        super().__init__()
+        self.vocab += PIECE_COUNT_VOCAB
+        self.stoi = {move: i for i, move in enumerate(self.vocab)}
+        self.itos = {i: move for i, move in enumerate(self.vocab)}
 
-        # if add_special_tokens:
-        #     return [self.bos_token_id] + main_tokens
+    def encode(self, text: str, add_special_tokens = True) -> list:
+        main_tokens = [self.stoi[move] for move in self.tokenize(text)]
         
         return main_tokens
 
@@ -181,5 +182,3 @@ class SquareTokenizer(Tokenizer):
             return [self.bos_token_id] + token_ids + [self.eos_token_id]
 
         return token_ids
-        
-

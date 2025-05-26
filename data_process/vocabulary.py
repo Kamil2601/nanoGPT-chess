@@ -85,8 +85,27 @@ SQUARE_VOCAB = [
 
 MATERIAL_VOCAB = [str(val) for val in range(41)]
 MATERIAL_VOCAB_EXTENDED = [str(val) for val in range(104)]
-MATERIAL_PAIR_VOCAB = [f"{white}|{black}" for (white, black) in itertools.product(MATERIAL_VOCAB, MATERIAL_VOCAB)]
+MATERIAL_PAIR_VOCAB = [
+    f"{white}|{black}"
+    for (white, black) in itertools.product(MATERIAL_VOCAB, MATERIAL_VOCAB)
+]
 ELO_VOCAB = [str(val) for val in range(0, 4001, 100)] + ["[UNK_ELO]"]
+
+queen_count = ["Q" + str(i) for i in range(0, 3)]
+rook_count = ["R" + str(i) for i in range(0, 4)]
+bishop_count = ["B" + str(i) for i in range(0, 4)]
+knight_count = ["N" + str(i) for i in range(0, 4)]
+pawn_count = ["P" + str(i) for i in range(0, 9)]
+
+PIECE_COUNT_VOCAB = [
+    q + r + b + k + p
+    for q in queen_count
+    for r in rook_count
+    for b in bishop_count
+    for k in knight_count
+    for p in pawn_count
+]
+
 
 class PieceMove(chess.Move):
     def __init__(self, from_square, to_square, promotion=None, piece_type=None):
@@ -104,7 +123,6 @@ class PieceMove(chess.Move):
             promotion = chess.PIECE_SYMBOLS.index(uci[5].lower())
 
         return cls(from_square, to_square, promotion=promotion, piece_type=piece_type)
-
 
     def __repr__(self) -> str:
         return f"{str(self)}"
