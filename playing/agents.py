@@ -277,7 +277,7 @@ class NegaMaxAgent(Agent):
 
     def negamax(self, board, depth, alpha, beta):
         if depth == 0 or board.is_game_over():
-            return self.evaluate_board(board)
+            return self.evaluate_board(board, alpha, beta)
         
         max_score = -float('inf')
         for move in self.ordered_moves(board):
@@ -298,7 +298,7 @@ class NegaMaxAgent(Agent):
         pass
     
     # Evaluate the board from the perspective of the current player
-    def evaluate_board(self, board):
+    def evaluate_board(self, board, alpha = None, beta = None):
         pass
 
 
@@ -338,3 +338,101 @@ class NegaMaxMaterialGPTAgent(NegaMaxMaterialAgent):
 
         return chess.Move.from_uci(best_move[1:])
     
+
+class NegaMaxMaterialGPTEloAgent(NegaMaxMaterialAgent):
+    def __init__(self, model, depth=3, model_elo = 1500, use_material_tokens = False) -> None:
+        super().__init__(depth)
+        self.model = model
+        self.model.cpu()
+        self.tokenizer = FullMoveTokenizerNoEOS()
+        self.model_elo = str(model_elo // 100 * 100)
+        self.use_material_tokens = use_material_tokens
+
+        if use_material_tokens:
+            self.tokenizer = FullMoveEloMaterialTokenizer()
+        else:
+            self.tokenizer = FullMoveTokenizerWithElo()
+
+    def evaluate_board(self, board, alpha = None, beta = None):
+        return self.quiescent_search(board, alpha, beta)
+    
+    def quiescent_search(self, board, alpha, beta):
+        all_possible_captures = [move for move in board.legal_moves if is_favorable_move(board, move)]
+
+        if len(all_possible_captures) == 0:
+            return self.static_evaluate(board)
+
+        max_score = -float('inf')
+        for move in all_possible_captures:
+            board.push(move)
+            score = -self.quiescent_search(board, -beta, -alpha)
+            board.pop()
+            max_score = max(max_score, score)
+            alpha = max(alpha, score)
+            if alpha > beta:
+                break
+        return max_score
+    
+    def static_evaluate(self, board):
+        color = 1 if board.turn == chess.WHITE else -1
+        return color * material_balance(board)
+    
+
+    def choose_from_best_moves(self, board, best_moves):    
+        game_str = board_to_piece_uci_moves(board, include_material=self.use_material_tokens)
+
+        if board.turn == chess.WHITE:
+            game_str = [self.model_elo, self.tokenizer.unk_elo_token] + game_str
+        else:
+            game_str = [self.tokenizer.unk_elo_token, self.model_elo] + game_str
+
+        game_encoded = self.tokenizer.encode(game_str)
+
+        moves = moves_piece_uci(board, best_moves)
+        moves_encoded = self.tokenizer.encode(moves)
+
+        with torch.inference_mode():
+            game_tensor = torch.tensor(game_encoded).unsqueeze(0)
+
+            model_output, _ = self.model(game_tensor)
+
+            moves_scores = model_output[0, -1, moves_encoded].softmax(-1)
+            best_move_index = moves_scores.argmax().item()
+            best_move = moves[best_move_index]
+
+            return chess.Move.from_uci(best_move[1:])
+        
+
+def is_favorable_move(board: chess.Board, move: chess.Move) -> bool:
+    if move.promotion is not None:
+        return True
+    if board.is_capture(move) and not board.is_en_passant(move):
+        if get_piece_val(board.piece_type_at(move.from_square)) < get_piece_val(
+            board.piece_type_at(move.to_square)
+        ) or len(board.attackers(board.turn, move.to_square)) > len(
+            board.attackers(not board.turn, move.to_square)
+        ):
+            return True
+    if board.is_en_passant(move):
+        return True
+    return False
+
+
+def get_piece_val(piece):
+    if(piece == None):
+        return 0
+    value = 0
+    if piece == "P" or piece == "p":
+        value = 10
+    if piece == "N" or piece == "n":
+        value = 30
+    if piece == "B" or piece == "b":
+        value = 30
+    if piece == "R" or piece == "r":
+        value = 50
+    if piece == "Q" or piece == "q":
+        value = 90
+    if piece == 'K' or piece == 'k':
+        value = 900
+    #value = value if (board.piece_at(place)).color else -value
+    return value

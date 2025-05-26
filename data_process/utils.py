@@ -73,3 +73,52 @@ def remove_last_player_material_token(piece_uci: pd.Series):
 
     piece_uci = piece_uci.apply(filter_func)
     return piece_uci
+
+
+def piece_count(board):
+    white = board.occupied_co[chess.WHITE]
+    black = board.occupied_co[chess.BLACK]
+    white_material = {
+        "Q": chess.popcount(white & board.queens),
+        "R": chess.popcount(white & board.rooks),
+        "B": chess.popcount(white & board.bishops),
+        "N": chess.popcount(white & board.knights),
+        "P": chess.popcount(white & board.pawns)
+    }
+
+    black_material = {
+        "Q": chess.popcount(black & board.queens),
+        "R": chess.popcount(black & board.rooks),
+        "B": chess.popcount(black & board.bishops),
+        "N": chess.popcount(black & board.knights),
+        "P": chess.popcount(black & board.pawns)
+    }
+
+    return white_material, black_material
+
+def piece_count_tokens(board, max_count={"Q": 2, "R": 3, "B": 3, "N": 3, "P": 8}):
+    white_material, black_material = piece_count(board)
+    white_tokens = "".join(
+        f"{piece}{min(count, max_count[piece])}" for piece, count in white_material.items()
+    )
+    black_tokens = "".join(
+        f"{piece}{min(count, max_count[piece])}" for piece, count in black_material.items()
+    )
+    return white_tokens, black_tokens
+
+def add_piece_count(game):
+    game = game.split(" ")
+    game_piece_count = []
+
+    board = chess.Board()
+
+    for move in game:
+        board.push(chess.Move.from_uci(move[1:]))
+        white_pieces, black_pieces = piece_count_tokens(board)
+        
+        game_piece_count += [move, white_pieces, black_pieces]
+
+    return " ".join(game_piece_count)
+
+def add_piece_count_to_games(games):
+    return games.apply(add_piece_count)
