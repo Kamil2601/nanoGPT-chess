@@ -388,7 +388,8 @@ def collate_fn_with_info(data):
 class GamesDataModule(pl.LightningDataModule):
     def __init__(
         self,
-        games=None,
+        train_games=None,
+        val_games=None,
         test_games=None,
         tokenizer=None,
         batch_size=64,
@@ -414,17 +415,15 @@ class GamesDataModule(pl.LightningDataModule):
         # self.games = games
         self.test_games = test_games
         
-        if games:
-            self.train_games, self.val_games = train_test_split(
-                games, test_size=validation_size, random_state=42
-            )
-
+        if train_games is not None:
             self.train_dataset = GamesDataset(
-                self.train_games,
+                train_games,
                 tokenizer=tokenizer,
                 max_game_length=max_game_length,
                 mask_elo_token=mask_elo_token,
             )
+
+        if val_games is not None:
             self.val_dataset = GamesDataset(
                 self.val_games,
                 tokenizer=tokenizer,
@@ -432,7 +431,7 @@ class GamesDataModule(pl.LightningDataModule):
                 mask_elo_token=mask_elo_token,
             )
 
-        if test_games:
+        if test_games is not None:
             self.test_dataset = GamesDataset(
                 test_games,
                 tokenizer=tokenizer,
@@ -445,9 +444,6 @@ class GamesDataModule(pl.LightningDataModule):
         return self.max_game_length + 1
 
     def train_dataloader(self) -> Any:
-        # if not self.games:
-        #     return None
-
         batch_sampler = SimilarLengthSequenceBatchSampler(
             self.train_dataset.games,
             batch_size=self.batch_size,
@@ -462,9 +458,6 @@ class GamesDataModule(pl.LightningDataModule):
         )
 
     def val_dataloader(self) -> Any:
-        # if not self.val_dataset:
-        #     return None
-
         return DataLoader(
             self.val_dataset,
             batch_size=self.batch_size,
@@ -474,9 +467,6 @@ class GamesDataModule(pl.LightningDataModule):
         )
 
     def test_dataloader(self) -> Any:
-        if not self.test_games:
-            return None
-
         return DataLoader(
             self.test_dataset,
             batch_size=self.batch_size,

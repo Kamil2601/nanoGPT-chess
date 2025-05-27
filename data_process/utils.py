@@ -122,3 +122,23 @@ def add_piece_count(game):
 
 def add_piece_count_to_games(games):
     return games.apply(add_piece_count)
+
+
+def add_elo_and_piece_count_to_dataset(row):
+    uci = row["piece_uci"]
+    uci = uci.split(" ")
+    uci = [token for i, token in enumerate(uci) if i % 6 in [0, 2, 3, 4]]
+    uci = " ".join(uci)
+
+    white_elo = row["white_elo"]
+    black_elo = row["black_elo"]
+    
+    elo_piece_uci = (
+        str(white_elo // 100 * 100)
+        + " "
+        + str(black_elo // 100 * 100)
+        + " "
+        + uci
+    )
+
+    return {"elo_piece_uci": elo_piece_uci}

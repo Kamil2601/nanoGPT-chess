@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
-from datasets import load_dataset
+from datasets import Dataset
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -16,8 +16,7 @@ from data_process.tokenizers import (FullMoveEloMaterialPairTokenizer,
                                      FullMoveEloPieceCountTokenizer,
                                      FullMoveTokenizerNoEOS,
                                      FullMoveTokenizerWithElo)
-from data_process.utils import (add_elo_and_piece_count_to_dataset,
-                                add_elo_token_to_games, join_material_tokens,
+from data_process.utils import (add_elo_token_to_games, join_material_tokens,
                                 remove_last_player_material_token,
                                 remove_material_tokens)
 from lightning_training import (GamesDataModule, LightningGPT,
@@ -100,7 +99,8 @@ checkpoint = None
 
 ##################
 
-columns_to_load = [
+
+headers = [
     #"index",
     #"id",
     #"date",
@@ -109,38 +109,36 @@ columns_to_load = [
     #"result",
     #"ply",
     "ply_30s",
-    "piece_uci"
+    "piece_uci",
 ]
 
-
-# Define file paths and column names
-data_files = {
-    "train": "./data/csv/uniform_elo_distribution/piece_count/train.csv",
-    "validation": "./data/csv/uniform_elo_distribution/piece_count/val.csv",
-}
+if train_size is not None:
+    games_df = pd.read_csv(data_path, delimiter=";", usecols=[3,4,7,8], header=None, names=headers, nrows=train_size + val_size)
+else:
+    games_df = pd.read_csv(data_path, delimiter=";", usecols=[3,4,7,8], header=None, names=headers)
 
 
-# Load both splits
-datasets = load_dataset(
-    "csv",
-    data_files=data_files,
-    delimiter=";",
-    usecols=columns_to_load,
-    num_proc=6,
-)
+# games_df = games_df[["result", "white_elo", "black_elo", "piece_uci", "ply_30s"]]
 
-datasets = datasets.map(add_elo_and_piece_count_to_dataset)
+# games = remove_material_tokens(games_df.piece_uci)
+# games = join_material_tokens(games_df.piece_uci, replace_bigger_values=True)
+games = remove_last_player_material_token(games_df.piece_uci)
 
-train_games = list(datasets["train"]["elo_piece_uci"])
-val_games = list(datasets["validation"]["elo_piece_uci"])
+games = add_elo_token_to_games(games, games_df.white_elo, games_df.black_elo)
+# games = games.apply(lambda x: x.split(" "))
+
+games = list(games)
 # cuts = list(games_df.ply_30s)
+
+del games_df
+gc.collect()
 
 # print(games[0])
 
 
 data_module = data_module = GamesDataModule(
-    train_games=train_games,
-    val_games=val_games,
+    games,
+    # cuts=cuts,
     batch_size=batch_size,
     validation_size=val_size,
     num_workers=num_workers,
