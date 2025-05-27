@@ -141,4 +141,4 @@ def add_elo_and_piece_count_to_dataset(row):
         + uci
     )
 
-    return {"elo_piece_uci": elo_piece_uci}
+    return {"game": elo_piece_uci}

@@ -220,11 +220,7 @@ class LightningGPTWeighted(LightningGPT):
 class GamesDataset(Dataset):
     def __init__(self, games, tokenizer, max_game_length=300, mask_elo_token=False):
         self.games = games
-        self.encoded_games = [tokenizer.encode(game) for game in games]
-        self.encoded_games = [
-            game for game in self.encoded_games if len(game) <= max_game_length + 2
-        ]
-        self.encoded_games = pa.array(self.encoded_games)
+        self.encoded_games = games.map(lambda row: {"game": tokenizer.encode(row["game"])}, num_proc=6)
         self.max_game_length = max_game_length
         self.tokenizer = tokenizer
         self.mask_elo_token = mask_elo_token
@@ -237,10 +233,7 @@ class GamesDataset(Dataset):
         return self.max_game_length + 1
 
     def __getitem__(self, idx):
-        # game = self.games[idx]
-        # encoded_game = self.tokenizer.encode(game)
-
-        encoded_game = self.encoded_games[idx].as_py()
+        encoded_game = self.encoded_games[idx]["game"]
         encoded_game = torch.tensor(encoded_game, dtype=torch.long)
 
         if self.mask_elo_token:
@@ -311,7 +304,10 @@ class SimilarLengthSequenceBatchSampler(Sampler):
         self.data_source = data_source
         self.batch_size = batch_size
         self.drop_last = drop_last
-        self.index_length = [(i, len(data_source[i])) for i in range(len(data_source))]
+        if isinstance(data_source[0], int):
+            self.index_length = [(i, data_source[i]) for i in range(len(data_source))]
+        else:
+            self.index_length = [(i, len(data_source[i])) for i in range(len(data_source))]
 
     def __iter__(self):
         np.random.shuffle(self.index_length)
@@ -388,8 +384,7 @@ def collate_fn_with_info(data):
 class GamesDataModule(pl.LightningDataModule):
     def __init__(
         self,
-        train_games=None,
-        val_games=None,
+        datasets = None,
         test_games=None,
         tokenizer=None,
         batch_size=64,
@@ -400,7 +395,8 @@ class GamesDataModule(pl.LightningDataModule):
         mask_elo_token=False,
     ) -> None:
         super().__init__()
-
+        
+        self.datasets = datasets
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.max_game_length = max_game_length
@@ -413,19 +409,19 @@ class GamesDataModule(pl.LightningDataModule):
         self.collate_fn = collate_fn
 
         # self.games = games
-        self.test_games = test_games
+        # self.test_games = test_games
         
-        if train_games is not None:
+        if "train" in datasets:
             self.train_dataset = GamesDataset(
-                train_games,
+                datasets["train"],
                 tokenizer=tokenizer,
                 max_game_length=max_game_length,
                 mask_elo_token=mask_elo_token,
             )
 
-        if val_games is not None:
+        if "validation" in datasets:
             self.val_dataset = GamesDataset(
-                self.val_games,
+                datasets["validation"],
                 tokenizer=tokenizer,
                 max_game_length=max_game_length,
                 mask_elo_token=mask_elo_token,
@@ -445,7 +441,7 @@ class GamesDataModule(pl.LightningDataModule):
 
     def train_dataloader(self) -> Any:
         batch_sampler = SimilarLengthSequenceBatchSampler(
-            self.train_dataset.encoded_games,
+            self.datasets["train"]["ply"],
             batch_size=self.batch_size,
             drop_last=False,
         )

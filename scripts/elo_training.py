@@ -105,7 +105,7 @@ columns_to_load = [
     "white_elo",
     "black_elo",
     #"result",
-    #"ply",
+    "ply",
     "ply_30s",
     "piece_uci"
 ]
@@ -127,18 +127,27 @@ datasets = load_dataset(
     num_proc=6,
 )
 
-datasets = datasets.map(add_elo_and_piece_count_to_dataset, num_proc=6, remove_columns=columns_to_load)
+columns_to_remove = [
+    #"index",
+    #"id",
+    #"date",
+    "white_elo",
+    "black_elo",
+    #"result",
+    # "ply",
+    "ply_30s",
+    "piece_uci"
+]
 
-train_games = list(datasets["train"]["elo_piece_uci"])
-val_games = list(datasets["validation"]["elo_piece_uci"])
+datasets = datasets.map(add_elo_and_piece_count_to_dataset, num_proc=6, remove_columns=columns_to_remove)
+
 # cuts = list(games_df.ply_30s)
 
 # print(games[0])
 
 
 data_module = data_module = GamesDataModule(
-    train_games=train_games,
-    val_games=val_games,
+    datasets=datasets,
     batch_size=batch_size,
     validation_size=val_size,
     num_workers=num_workers,
