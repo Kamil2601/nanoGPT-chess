@@ -1,3 +1,4 @@
+import gc
 import os
 import sys
 
@@ -12,6 +13,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from data_process.tokenizers import (FullMoveEloMaterialPairTokenizer,
                                      FullMoveEloMaterialTokenizer,
+                                     FullMoveEloPieceCountTokenizer,
                                      FullMoveTokenizerNoEOS,
                                      FullMoveTokenizerWithElo)
 from data_process.utils import (add_elo_token_to_games, join_material_tokens,
@@ -26,7 +28,8 @@ from nanoGPT.model import GPTConfig
 
 # tokenizer = FullMoveTokenizerWithElo()
 # tokenizer = FullMoveEloMaterialPairTokenizer()
-tokenizer = FullMoveEloMaterialTokenizer()
+# tokenizer = FullMoveEloMaterialTokenizer()
+tokenizer = FullMoveEloPieceCountTokenizer()
 
 block_size = 604
 
@@ -61,9 +64,9 @@ full_training_size = {
 small_training_max_epochs = 5
 full_training_max_epochs = 10
 
-train_size = small_training_size["train"]
-val_size = small_training_size["val"]
-max_epochs = small_training_max_epochs
+train_size = full_training_size["train"]
+val_size = full_training_size["val"]
+max_epochs = full_training_max_epochs
 
 
 model_config = model_config_big
@@ -76,53 +79,61 @@ num_workers = 8
 ignore_first_n_targets = 1
 training_target_step = 2 # 2 is for ignoring material prediction during loss calculation, otherwise should be 1
 
-data_path = "./data/csv/uniform_elo_distribution/train.csv"
+data_path = "./data/csv/uniform_elo_distribution/train_piece_count.csv"
 # data_path = "./data/test.csv"
 
 max_game_length = block_size
 
-tensorboard_logger_version = None # SET TO NONE FOR FUTURE TRAININGS
+tensorboard_logger_version = 0 # SET TO NONE FOR FUTURE TRAININGS
 
 
-tensorboard_logger_name = "elo_material_ignore_material_prediction"
-checkpoint_path = f"./models/small_training/{tensorboard_logger_name}"
+tensorboard_logger_name = "elo_piece_count_ignore_material_prediction"
+checkpoint_path = f"./models/full_training/{tensorboard_logger_name}"
+tensorboard_dir = f"./lightning_logs/full_training/"
 
 mask_elo_token = True
 
-# checkpoint = "./models/elo_material_pair_ignore_material_prediction_full/epoch=8-step=1125000.ckpt"
 checkpoint = None
+# checkpoint = "./models/full_training/elo_material_ignore_material_prediction/epoch=1-step=250000.ckpt"
 
 
 ##################
 
 
 headers = [
-    "index",
-    "id",
-    "date",
+    #"index",
+    #"id",
+    #"date",
     "white_elo",
     "black_elo",
-    "result",
-    "ply",
+    #"result",
+    #"ply",
     "ply_30s",
     "piece_uci",
 ]
 
 if train_size is not None:
-    games_df = pd.read_csv(data_path, delimiter=";", header=None, names=headers, nrows=train_size + val_size)
+    games_df = pd.read_csv(data_path, delimiter=";", usecols=[3,4,7,8], header=None, names=headers, nrows=train_size + val_size)
 else:
-    games_df = pd.read_csv(data_path, delimiter=";", header=None, names=headers)
+    games_df = pd.read_csv(data_path, delimiter=";", usecols=[3,4,7,8], header=None, names=headers)
 
 
-games_df = games_df[["result", "white_elo", "black_elo", "piece_uci", "ply_30s"]]
+# games_df = games_df[["result", "white_elo", "black_elo", "piece_uci", "ply_30s"]]
 
 # games = remove_material_tokens(games_df.piece_uci)
 # games = join_material_tokens(games_df.piece_uci, replace_bigger_values=True)
-# games = add_elo_token_to_games(games, games_df.white_elo, games_df.black_elo)
 games = remove_last_player_material_token(games_df.piece_uci)
 
+games = add_elo_token_to_games(games, games_df.white_elo, games_df.black_elo)
+# games = games.apply(lambda x: x.split(" "))
+
 games = list(games)
-cuts = list(games_df.ply_30s)
+# cuts = list(games_df.ply_30s)
+
+del games_df
+gc.collect()
+
+# print(games[0])
 
 
 data_module = data_module = GamesDataModule(
@@ -158,7 +169,7 @@ checkpoint_callback = ModelCheckpoint(
 )
 
 tensorboard_logger = pl.loggers.TensorBoardLogger(
-    save_dir="./lightning_logs/", name=tensorboard_logger_name, version=tensorboard_logger_version
+    save_dir=tensorboard_dir, name=tensorboard_logger_name, version=tensorboard_logger_version
 )
 
 trainer = pl.Trainer(

@@ -12,12 +12,12 @@ from data_process.utils import (add_piece_count, add_piece_count_to_games,
 
 tqdm.pandas()
 
-input_file_path = "./data/test.csv"
-output_file_path = "./data/test_piece_count.csv"
+input_file_path = "../data/csv/uniform_elo_distribution/train.csv"
+output_file_path = "../data/csv/uniform_elo_distribution/train_piece_count.csv"
 
 headers = ["index", "id", "date", "white_elo", "black_elo", "result", "ply", "ply_30s", "piece_uci"]
 
-games_df = pd.read_csv("./data/test.csv", delimiter=";", header=None, names=headers)
+games_df = pd.read_csv(input_file_path, delimiter=";", header=None, names=headers)
 
 games = remove_material_tokens(games_df.piece_uci)
 

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Optional
 
+import datasets
 import numpy as np
 import pyarrow as pa
 import pytorch_lightning as pl
@@ -229,13 +230,16 @@ class GamesDataset(Dataset):
         self.mask_elo_token = mask_elo_token
 
     def __len__(self):
-        return len(self.encoded_games)
+        return len(self.games)
 
     @property
     def block_size(self):
         return self.max_game_length + 1
 
     def __getitem__(self, idx):
+        # game = self.games[idx]
+        # encoded_game = self.tokenizer.encode(game)
+
         encoded_game = self.encoded_games[idx].as_py()
         encoded_game = torch.tensor(encoded_game, dtype=torch.long)
 
@@ -247,45 +251,6 @@ class GamesDataset(Dataset):
         y = encoded_game[1:]
         return x, y
 
-
-class CutGamesDataset(Dataset):
-    def __init__(
-        self, games, cuts, tokenizer=None, max_game_length=300, mask_elo_token=False
-    ):
-        if tokenizer == None:
-            self.tokenizer = FullMoveTokenizerNoEOS()
-        else:
-            self.tokenizer = tokenizer
-
-        self.games = games
-        self.cuts = cuts
-        self.games_cuts = zip(games, cuts)
-
-        self.encoded_games = [
-            self.tokenizer.encode(game, cut) for game, cut in self.games_cuts
-        ]
-        self.encoded_games = [
-            game for game in self.encoded_games if len(game) <= max_game_length + 2
-        ]
-
-        self.encoded_games = pa.array(self.encoded_games)
-        self.max_game_length = max_game_length
-        self.mask_elo_token = mask_elo_token
-
-    def __len__(self):
-        return len(self.encoded_games)
-
-    def __getitem__(self, idx):
-        encoded_game = self.encoded_games[idx].as_py()
-        encoded_game = torch.tensor(encoded_game, dtype=torch.long)
-
-        if self.mask_elo_token:
-            index_to_mask = np.random.choice([0, 1])
-            encoded_game[index_to_mask] = self.tokenizer.unk_elo_token_id
-
-        x = encoded_game[:-1]
-        y = encoded_game[1:]
-        return x, y
 
 
 class WeightedGamesDataset(Dataset):
@@ -424,7 +389,6 @@ class GamesDataModule(pl.LightningDataModule):
     def __init__(
         self,
         games=None,
-        cuts=None,
         test_games=None,
         tokenizer=None,
         batch_size=64,
@@ -447,77 +411,45 @@ class GamesDataModule(pl.LightningDataModule):
         self.tokenizer = tokenizer
         self.collate_fn = collate_fn
 
-        self.games = games
+        # self.games = games
         self.test_games = test_games
+        
+        if games:
+            self.train_games, self.val_games = train_test_split(
+                games, test_size=validation_size, random_state=42
+            )
 
-        if cuts is None:
-            if games:
-                self.train_games, self.val_games = train_test_split(
-                    games, test_size=validation_size, random_state=42
-                )
+            self.train_dataset = GamesDataset(
+                self.train_games,
+                tokenizer=tokenizer,
+                max_game_length=max_game_length,
+                mask_elo_token=mask_elo_token,
+            )
+            self.val_dataset = GamesDataset(
+                self.val_games,
+                tokenizer=tokenizer,
+                max_game_length=max_game_length,
+                mask_elo_token=mask_elo_token,
+            )
 
-                self.train_dataset = GamesDataset(
-                    self.train_games,
-                    tokenizer=tokenizer,
-                    max_game_length=max_game_length,
-                    mask_elo_token=mask_elo_token,
-                )
-                self.val_dataset = GamesDataset(
-                    self.val_games,
-                    tokenizer=tokenizer,
-                    max_game_length=max_game_length,
-                    mask_elo_token=mask_elo_token,
-                )
-
-            if test_games:
-                self.test_dataset = GamesDataset(
-                    test_games,
-                    tokenizer=tokenizer,
-                    max_game_length=max_game_length,
-                    mask_elo_token=mask_elo_token,
-                )
-
-        else:
-            if games:
-                self.train_games, self.val_games = train_test_split(
-                    games, test_size=validation_size, random_state=42
-                )
-
-                self.train_dataset = CutGamesDataset(
-                    self.train_games,
-                    cuts,
-                    tokenizer=tokenizer,
-                    max_game_length=max_game_length,
-                    mask_elo_token=mask_elo_token,
-                )
-
-                self.val_dataset = CutGamesDataset(
-                    self.val_games,
-                    cuts,
-                    tokenizer=tokenizer,
-                    max_game_length=max_game_length,
-                    mask_elo_token=mask_elo_token,
-                )
-
-            if test_games:
-                self.test_dataset = CutGamesDataset(
-                    test_games,
-                    cuts,
-                    tokenizer=tokenizer,
-                    max_game_length=max_game_length,
-                    mask_elo_token=mask_elo_token,
-                )
+        if test_games:
+            self.test_dataset = GamesDataset(
+                test_games,
+                tokenizer=tokenizer,
+                max_game_length=max_game_length,
+                mask_elo_token=mask_elo_token,
+            )
 
     @property
     def block_size(self):
         return self.max_game_length + 1
 
     def train_dataloader(self) -> Any:
-        if not self.games:
-            return None
+        # if not self.games:
+        #     return None
 
         batch_sampler = SimilarLengthSequenceBatchSampler(
-            self.train_dataset.encoded_games,
+            self.train_dataset.games,
             batch_size=self.batch_size,
             drop_last=False,
         )
@@ -530,8 +462,8 @@ class GamesDataModule(pl.LightningDataModule):
         )
 
     def val_dataloader(self) -> Any:
-        if not self.games:
-            return None
+        # if not self.val_dataset:
+        #     return None
 
         return DataLoader(
             self.val_dataset,
@@ -614,88 +546,4 @@ class WeightedGamesDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers,
             collate_fn=self.collate_fn,
-        )
-
-
-class DataModuleMaiaTraining(pl.LightningDataModule):
-    def __init__(
-        self, dataset_dict, batch_size=64, num_workers=8, max_game_length=300
-    ) -> None:
-        super().__init__()
-
-        self.dataset_dict = dataset_dict
-
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-        self.max_game_length = max_game_length
-
-        self.train_dataset = None
-        self.val_dataset = None
-        self.test_dataset = None
-
-    def setup(self, stage):
-        if stage == "fit":
-            if self.train_dataset is None:
-                self.train_dataset = CutGamesDataset(
-                    self.dataset_dict["train"]["piece_uci"],
-                    self.dataset_dict["train"]["ply_30s"],
-                    max_game_length=self.max_game_length,
-                )
-            if self.val_dataset is None:
-                self.val_dataset = CutGamesDataset(
-                    self.dataset_dict["valid"]["piece_uci"],
-                    self.dataset_dict["valid"]["ply_30s"],
-                    max_game_length=self.max_game_length,
-                )
-
-        if stage == "validate":
-            if self.val_dataset is None:
-                self.val_dataset = CutGamesDataset(
-                    self.dataset_dict["valid"]["piece_uci"],
-                    self.dataset_dict["valid"]["ply_30s"],
-                    max_game_length=self.max_game_length,
-                )
-
-        if stage == "test":
-            if self.test_dataset is None:
-                self.test_dataset = CutGamesDataset(
-                    self.dataset_dict["test"]["piece_uci"],
-                    self.dataset_dict["test"]["ply_30s"],
-                    max_game_length=self.max_game_length,
-                )
-
-    @property
-    def block_size(self):
-        return self.max_game_length + 1
-
-    def train_dataloader(self) -> Any:
-        batch_sampler = SimilarLengthSequenceBatchSampler(
-            self.train_dataset.encoded_games,
-            batch_size=self.batch_size,
-            drop_last=False,
-        )
-
-        return DataLoader(
-            self.train_dataset,
-            batch_sampler=batch_sampler,
-            num_workers=self.num_workers,
-            collate_fn=collate_fn,
-        )
-
-    def val_dataloader(self) -> Any:
-        return DataLoader(
-            self.val_dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            collate_fn=collate_fn,
-        )
-
-    def test_dataloader(self) -> Any:
-        return DataLoader(
-            self.test_dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            collate_fn=collate_fn,
         )
