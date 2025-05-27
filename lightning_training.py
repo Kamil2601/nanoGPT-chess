@@ -445,7 +445,7 @@ class GamesDataModule(pl.LightningDataModule):
 
     def train_dataloader(self) -> Any:
         batch_sampler = SimilarLengthSequenceBatchSampler(
-            self.train_dataset.games,
+            self.train_dataset.encoded_games,
             batch_size=self.batch_size,
             drop_last=False,
         )

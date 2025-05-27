@@ -80,8 +80,6 @@ num_workers = 8
 ignore_first_n_targets = 1
 training_target_step = 2 # 2 is for ignoring material prediction during loss calculation, otherwise should be 1
 
-data_path = "./data/csv/uniform_elo_distribution/train_piece_count.csv"
-# data_path = "./data/test.csv"
 
 max_game_length = block_size
 
@@ -129,7 +127,7 @@ datasets = load_dataset(
     num_proc=6,
 )
 
-datasets = datasets.map(add_elo_and_piece_count_to_dataset)
+datasets = datasets.map(add_elo_and_piece_count_to_dataset, num_proc=6, remove_columns=columns_to_load)
 
 train_games = list(datasets["train"]["elo_piece_uci"])
 val_games = list(datasets["validation"]["elo_piece_uci"])
