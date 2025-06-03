@@ -375,11 +375,9 @@ class GamesDataModule(pl.LightningDataModule):
     def __init__(
         self,
         datasets = None,
-        test_games=None,
         tokenizer=None,
         batch_size=64,
         num_workers=12,
-        validation_size=0.05,
         collate_fn=collate_fn,
         mask_elo_token=False,
     ) -> None:
@@ -413,9 +411,9 @@ class GamesDataModule(pl.LightningDataModule):
                 mask_elo_token=mask_elo_token,
             )
 
-        if test_games is not None:
+        if "test" in datasets:
             self.test_dataset = GamesDataset(
-                test_games,
+                datasets["test"],
                 tokenizer=tokenizer,
                 mask_elo_token=mask_elo_token,
             )
