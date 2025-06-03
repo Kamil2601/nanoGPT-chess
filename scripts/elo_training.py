@@ -19,7 +19,7 @@ from data_process.tokenizers import (FullMoveEloMaterialPairTokenizer,
 from data_process.utils import (add_elo_and_piece_count_to_dataset,
                                 add_elo_token_to_games, join_material_tokens,
                                 remove_last_player_material_token,
-                                remove_material_tokens)
+                                remove_material_tokens, row_for_base_training)
 from lightning_training import (GamesDataModule, LightningGPT,
                                 LightningGPTWeighted, WeightedGamesDataModule,
                                 WeightsConfig)
@@ -30,7 +30,8 @@ from nanoGPT.model import GPTConfig
 # tokenizer = FullMoveTokenizerWithElo()
 # tokenizer = FullMoveEloMaterialPairTokenizer()
 # tokenizer = FullMoveEloMaterialTokenizer()
-tokenizer = FullMoveEloPieceCountTokenizer()
+# tokenizer = FullMoveEloPieceCountTokenizer()
+tokenizer = FullMoveTokenizerNoEOS()
 
 block_size = 604
 
@@ -81,16 +82,14 @@ ignore_first_n_targets = 1
 training_target_step = 2 # 2 is for ignoring material prediction during loss calculation, otherwise should be 1
 
 
-max_game_length = block_size
-
 tensorboard_logger_version = 0 # SET TO NONE FOR FUTURE TRAININGS
 
 
-tensorboard_logger_name = "elo_piece_count_ignore_material_prediction"
+tensorboard_logger_name = "only_moves"
 checkpoint_path = f"./models/full_training/{tensorboard_logger_name}"
 tensorboard_dir = f"./lightning_logs/full_training/"
 
-mask_elo_token = True
+mask_elo_token = False
 
 checkpoint = None
 # checkpoint = "./models/full_training/elo_material_ignore_material_prediction/epoch=1-step=250000.ckpt"
@@ -139,7 +138,8 @@ columns_to_remove = [
     "piece_uci"
 ]
 
-datasets = datasets.map(add_elo_and_piece_count_to_dataset, num_proc=6, remove_columns=columns_to_remove)
+# datasets = datasets.map(add_elo_and_piece_count_to_dataset, num_proc=6, remove_columns=columns_to_remove)
+datasets = datasets.map(row_for_base_training, num_proc=6, remove_columns=columns_to_remove)
 
 # cuts = list(games_df.ply_30s)
 
@@ -153,7 +153,6 @@ data_module = data_module = GamesDataModule(
     num_workers=num_workers,
     tokenizer=tokenizer,
     mask_elo_token=mask_elo_token,
-    max_game_length=max_game_length,
 )
 
 if checkpoint is None:

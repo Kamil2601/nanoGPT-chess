@@ -218,19 +218,14 @@ class LightningGPTWeighted(LightningGPT):
 
 
 class GamesDataset(Dataset):
-    def __init__(self, games, tokenizer, max_game_length=300, mask_elo_token=False):
+    def __init__(self, games, tokenizer, mask_elo_token=False):
         self.games = games
         self.encoded_games = games.map(lambda row: {"game": tokenizer.encode(row["game"])}, num_proc=6)
-        self.max_game_length = max_game_length
         self.tokenizer = tokenizer
         self.mask_elo_token = mask_elo_token
 
     def __len__(self):
         return len(self.games)
-
-    @property
-    def block_size(self):
-        return self.max_game_length + 1
 
     def __getitem__(self, idx):
         encoded_game = self.encoded_games[idx]["game"]
@@ -248,7 +243,7 @@ class GamesDataset(Dataset):
 
 class WeightedGamesDataset(Dataset):
     def __init__(
-        self, games_df, weights_config=None, tokenizer=None, max_game_length=300
+        self, games_df, weights_config=None, tokenizer=None
     ):
         if tokenizer == None:
             tokenizer = FullMoveTokenizerNoEOS()
@@ -261,11 +256,6 @@ class WeightedGamesDataset(Dataset):
         self.weights_config = weights_config
 
         self.encoded_games = [tokenizer.encode(game) for game in games_df["piece_uci"]]
-
-        if max_game_length is not None:
-            self.encoded_games = [
-                game for game in self.encoded_games if len(game) <= max_game_length + 2
-            ]
 
         self.encoded_games = pa.array(self.encoded_games)
         self.white_elo = torch.tensor(list(games_df["white_elo"]), dtype=torch.float32)
@@ -389,7 +379,6 @@ class GamesDataModule(pl.LightningDataModule):
         tokenizer=None,
         batch_size=64,
         num_workers=12,
-        max_game_length=300,
         validation_size=0.05,
         collate_fn=collate_fn,
         mask_elo_token=False,
@@ -399,7 +388,6 @@ class GamesDataModule(pl.LightningDataModule):
         self.datasets = datasets
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.max_game_length = max_game_length
         self.mask_elo_token = mask_elo_token
 
         if tokenizer == None:
@@ -415,7 +403,6 @@ class GamesDataModule(pl.LightningDataModule):
             self.train_dataset = GamesDataset(
                 datasets["train"],
                 tokenizer=tokenizer,
-                max_game_length=max_game_length,
                 mask_elo_token=mask_elo_token,
             )
 
@@ -423,7 +410,6 @@ class GamesDataModule(pl.LightningDataModule):
             self.val_dataset = GamesDataset(
                 datasets["validation"],
                 tokenizer=tokenizer,
-                max_game_length=max_game_length,
                 mask_elo_token=mask_elo_token,
             )
 
@@ -431,13 +417,8 @@ class GamesDataModule(pl.LightningDataModule):
             self.test_dataset = GamesDataset(
                 test_games,
                 tokenizer=tokenizer,
-                max_game_length=max_game_length,
                 mask_elo_token=mask_elo_token,
             )
-
-    @property
-    def block_size(self):
-        return self.max_game_length + 1
 
     def train_dataloader(self) -> Any:
         batch_sampler = SimilarLengthSequenceBatchSampler(
@@ -480,7 +461,6 @@ class WeightedGamesDataModule(pl.LightningDataModule):
         weights_config=None,
         batch_size=64,
         num_workers=12,
-        max_game_length=300,
         test_size=0.05,
         collate_fn=collate_fn_with_weights,
     ) -> None:
@@ -492,7 +472,6 @@ class WeightedGamesDataModule(pl.LightningDataModule):
 
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.max_game_length = max_game_length
 
         if tokenizer == None:
             tokenizer = FullMoveTokenizerNoEOS()
@@ -506,10 +485,6 @@ class WeightedGamesDataModule(pl.LightningDataModule):
         self.val_dataset = WeightedGamesDataset(
             val_games, tokenizer=tokenizer, weights_config=weights_config
         )
-
-    @property
-    def block_size(self):
-        return self.max_game_length + 1
 
     def train_dataloader(self) -> Any:
         batch_sampler = SimilarLengthSequenceBatchSampler(

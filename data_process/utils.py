@@ -142,3 +142,11 @@ def add_elo_and_piece_count_to_dataset(row):
     )
 
     return {"game": elo_piece_uci}
+
+def row_for_base_training(row):
+    uci = row["piece_uci"]
+    uci = uci.split(" ")
+    uci = [token for i, token in enumerate(uci) if i % 3 == 0] # Keep only the moves
+    uci = " ".join(uci)
+
+    return {"game": uci}
