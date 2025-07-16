@@ -20,10 +20,11 @@ from data_process.utils import (add_elo_and_piece_count_to_dataset,
                                 add_elo_token_to_games, join_material_tokens,
                                 remove_last_player_material_token,
                                 remove_material_tokens, row_for_base_training)
-from lightning_training import (GamesDataModule, LightningGPT,
-                                LightningGPTWeighted, WeightedGamesDataModule,
-                                WeightsConfig)
 from nanoGPT.model import GPTConfig
+from training.lightning_training import (GamesDataModule, LightningGPT,
+                                         LightningGPTWeighted,
+                                         WeightedGamesDataModule,
+                                         WeightsConfig)
 
 ### SETTINGS ###
 
@@ -138,8 +139,8 @@ columns_to_remove = [
     "piece_uci"
 ]
 
-# datasets = datasets.map(add_elo_and_piece_count_to_dataset, num_proc=6, remove_columns=columns_to_remove)
-datasets = datasets.map(row_for_base_training, num_proc=6, remove_columns=columns_to_remove)
+datasets = datasets.map(add_elo_and_piece_count_to_dataset, num_proc=6, remove_columns=columns_to_remove)
+# datasets = datasets.map(row_for_base_training, num_proc=6, remove_columns=columns_to_remove)
 
 # cuts = list(games_df.ply_30s)
 
@@ -196,4 +197,4 @@ trainer.fit(
     model=pl_model,
     datamodule=data_module,
     ckpt_path=checkpoint,
-)
+))

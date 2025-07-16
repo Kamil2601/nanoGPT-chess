@@ -7,10 +7,11 @@ from datasets import Dataset
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 from data_process.tokenizers import FullMoveTokenizerNoEOS
-from lightning_training import (GamesDataModule, LightningGPT,
-                                LightningGPTWeighted, WeightedGamesDataModule,
-                                WeightsConfig)
 from nanoGPT.model import GPTConfig
+from training.lightning_training import (GamesDataModule, LightningGPT,
+                                         LightningGPTWeighted,
+                                         WeightedGamesDataModule,
+                                         WeightsConfig)
 
 tokenizer = FullMoveTokenizerNoEOS()
 
@@ -202,4 +203,4 @@ trainer.fit(
 #     datamodule=data_module,
 #     ckpt_path=checkpoint
 #     # ckpt_path=ckpt_path
-# )
+# )# )

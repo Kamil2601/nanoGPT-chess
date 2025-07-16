@@ -83,6 +83,7 @@ class GPTEloAgent(Agent):
 
         game_encoded = self.tokenizer.encode(game_str)
 
+
         legal_moves = legal_moves_piece_uci(board)
         legal_moves_encoded = self.tokenizer.encode(legal_moves)
 

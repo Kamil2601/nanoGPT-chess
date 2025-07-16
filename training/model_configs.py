@@ -34,7 +34,7 @@ material_model_config = GPTConfig(
 )
 
 # white_elo black_elo white_move black_piece_count black_move white_piece_count
-# Example: "1800 [UNK_ELO] Pe2e4 39 Pd7d5 39 Pe4d5 38"
+# Example: "1800 [UNK_ELO] Pe2e4 Q1R2B2N2P8 Pd7d5 Q1R2B2N2P8 Pe4d5 Q1R2B2N2P7"
 piece_count_model_config = GPTConfig(
     block_size=604,
     vocab_size=piece_count_tokenizer.vocab_size,

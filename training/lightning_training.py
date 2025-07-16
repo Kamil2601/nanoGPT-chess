@@ -58,7 +58,7 @@ class LightningGPT(pl.LightningModule):
         test_start_token=10,
         test_token_step=1,
         training_ignore_first_n_targets=0,
-        trainig_target_step=1,
+        training_target_step=1,
         masked_elo_test=False,
     ):
         super().__init__()
@@ -74,7 +74,7 @@ class LightningGPT(pl.LightningModule):
         self.test_start_token = test_start_token
         self.test_token_step = test_token_step
         self.training_ignore_first_n_targets = training_ignore_first_n_targets
-        self.trainig_target_step = trainig_target_step
+        self.training_target_step = training_target_step
         self.masked_elo_test = masked_elo_test
 
         self.test_accuracy = MulticlassAccuracy(
