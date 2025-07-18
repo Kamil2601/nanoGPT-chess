@@ -136,6 +136,16 @@ class LightningGPT(pl.LightningModule):
         self.log("val_loss", loss, prog_bar=True)
 
     def test_step(self, batch, batch_idx):
+        batch_dict = False
+        if isinstance(batch, dict):
+            # If the batch is a dictionary, extract the input_ids and target_ids
+            inputs = batch["input_ids"]
+            targets = batch["target_ids"]
+            white_elos = batch["white_elo"]
+            black_elos = batch["black_elo"]
+            batch = (inputs, targets)
+            batch_dict = True
+
         if self.masked_elo_test:
             logits, target_moves = self.logits_and_targets_for_masked_elo(batch)
         else:
@@ -161,8 +171,6 @@ class LightningGPT(pl.LightningModule):
             end = (i + 1) * self.acc_bin_range
             self.test_acc_bins[i].update(predicted_moves[:, start:end].cpu(), target_moves[:, start:end].cpu())
 
-        if not self.use_elo:
-            return
         
         target_white_moves = target_moves[:, ::2, ...].to(self.device)
         target_black_moves = target_moves[:, 1::2, ...].to(self.device)
@@ -173,8 +181,12 @@ class LightningGPT(pl.LightningModule):
         inputs = batch[0].to(self.device)
 
         for i in range(len(batch)):
-            white_elo = self.tokenizer.decode_token(inputs[i][0].item())
-            black_elo = self.tokenizer.decode_token(inputs[i][1].item())
+            if batch_dict:
+                white_elo = white_elos[i]
+                black_elo = black_elos[i]
+            else:
+                white_elo = self.tokenizer.decode_token(inputs[i][0].item())
+                black_elo = self.tokenizer.decode_token(inputs[i][1].item())
 
             white_elo_key = f"{white_elo}"
             black_elo_key = f"{black_elo}"
@@ -291,66 +303,6 @@ class LightningGPT(pl.LightningModule):
         return output_all_moves, target_moves
 
 
-    def masked_elo_test_step(self, batch):
-        x, y = batch
-        x_black_elo_masked = x.clone()
-        x_black_elo_masked[:, 1, ...] = self.tokenizer.unk_elo_token_id
-
-        x_white_elo_masked = x.clone()
-        x_white_elo_masked[:, 0, ...] = self.tokenizer.unk_elo_token_id
-
-        batch_black_elo_masked = (x_black_elo_masked, y)
-        batch_white_elo_masked = (x_white_elo_masked, y)
-
-        output_black_elo_masked, _  = self.forward_batch_test(batch_black_elo_masked)
-        output_white_elo_masked, _  = self.forward_batch_test(batch_white_elo_masked)
-
-        output_white_moves = output_black_elo_masked[:, self.test_start_token :: self.test_token_step, ...][:, ::2, ...]
-        output_black_moves = output_white_elo_masked[:, self.test_start_token :: self.test_token_step, ...][:, 1::2, ...]
-
-        stacked = torch.stack((output_white_moves, output_black_moves), dim=2)
-
-        output_all_moves = stacked.reshape(output_white_moves.size(0), -1, output_white_moves.size(2))
-
-        predicted_moves = torch.argmax(output_all_moves, dim=-1)
-        target_moves = y[:, self.test_start_token :: self.test_token_step, ...]
-
-        self.test_accuracy.update(
-            predicted_moves,
-            target_moves,
-        )
-
-        self.test_perplexity.update(
-            output_all_moves,
-            target_moves
-        )
-
-        # predicted_white_moves = torch.argmax(output_white_moves, dim=-1)
-        # predicted_black_moves = torch.argmax(output_black_moves, dim=-1)
-
-        # target_white_moves = y[:, self.test_start_token :: self.test_token_step, ...][:, ::2, ...]
-        # target_black_moves = y[:, self.test_start_token :: self.test_token_step, ...][:, 1::2, ...]
-
-
-        # self.test_accuracy.update(
-        #     predicted_white_moves,
-        #     target_white_moves,
-        # )
-
-        # self.test_accuracy.update(
-        #     predicted_black_moves,
-        #     target_black_moves,
-        # )
-
-        # self.test_perplexity.update(
-        #     output_white_moves,
-        #     target_white_moves
-        # )
-
-        # self.test_perplexity.update(
-        #     output_black_moves,
-        #     target_black_moves
-        # )
 
 class LightningGPTWeighted(LightningGPT):
     def forward_batch(self, batch):
@@ -382,7 +334,39 @@ class GamesDataset(Dataset):
         x = encoded_game[:-1]
         y = encoded_game[1:]
         return x, y
+    
 
+class TestGamesDataset(Dataset):
+    def __init__(self, games, tokenizer, mask_elo_token=False):
+        self.games = games
+        self.encoded_games = games.map(lambda row: {"game": tokenizer.encode(row["game"])}, num_proc=6)
+        self.tokenizer = tokenizer
+        self.mask_elo_token = mask_elo_token
+
+    def __len__(self):
+        return len(self.games)
+
+    def __getitem__(self, idx):
+        row = self.games[idx]
+        encoded_game = self.encoded_games[idx]["game"]
+        encoded_game = torch.tensor(encoded_game, dtype=torch.long)
+
+        if self.mask_elo_token:
+            index_to_mask = np.random.choice([0, 1])
+            encoded_game[index_to_mask] = self.tokenizer.unk_elo_token_id
+
+        x = encoded_game[:-1]
+        y = encoded_game[1:]
+
+        white_elo = int(row["white_elo"]) // 100 * 100
+        black_elo = int(row["black_elo"]) // 100 * 100
+
+        return {
+            "input_ids": x,
+            "target_ids": y,
+            "white_elo": white_elo,
+            "black_elo": black_elo
+        }
 
 
 class WeightedGamesDataset(Dataset):
@@ -500,20 +484,29 @@ def collate_fn_with_weights(data):
 
 
 def collate_fn_with_info(data):
-    inputs = [d[0] for d in data]
-    targets = [d[1] for d in data]
-    white_elo = [d[2] for d in data]
-    black_elo = [d[3] for d in data]
-    result = [d[4] for d in data]
+    inputs = [d["input_ids"] for d in data]
+    targets = [d["target_ids"] for d in data]
+    white_elo = [int(d["white_elo"]) for d in data]
+    black_elo = [int(d["black_elo"]) for d in data]
+    # # result = [d["result"] for d in data]
 
     padded_inputs = pad_sequence(inputs, padding_value=0)
     padded_targets = pad_sequence(targets, padding_value=0)
-    white_elo = torch.stack(white_elo)
-    black_elo = torch.stack(black_elo)
-    result = torch.stack(result)
+    # result = torch.stack(result)
 
-    return padded_inputs, padded_targets, white_elo, black_elo, result
+    # return inputs, targets
 
+    return {
+        "input_ids": padded_inputs,
+        "target_ids": padded_targets,
+        "white_elo": white_elo,
+        "black_elo": black_elo,
+        # "result": result
+    }
+
+def test_dataloader(games, tokenizer, batch_size=32, num_workers=8):
+    dataset = TestGamesDataset(games, tokenizer)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn_with_info, num_workers=num_workers)
 
 class GamesDataModule(pl.LightningDataModule):
     def __init__(
