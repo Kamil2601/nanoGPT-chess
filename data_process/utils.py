@@ -53,15 +53,7 @@ def join_material_tokens(piece_uci: pd.Series, replace_bigger_values: bool = Tru
     return piece_uci
 
 
-def add_elo_token_to_games(piece_uci, white_elo, black_elo):
-    elo_piece_uci = (
-        (white_elo // 100 * 100).astype(str)
-        + " "
-        + (black_elo // 100 * 100).astype(str)
-        + " "
-        + piece_uci
-    )
-    return elo_piece_uci
+
 
 
 def remove_last_player_material_token(piece_uci: pd.Series):
@@ -106,6 +98,8 @@ def piece_count_tokens(board, max_count={"Q": 2, "R": 3, "B": 3, "N": 3, "P": 8}
     )
     return white_tokens, black_tokens
 
+
+
 def add_piece_count(game):
     game = game.split(" ")
     game_piece_count = []
@@ -122,6 +116,26 @@ def add_piece_count(game):
 
 def add_piece_count_to_games(games):
     return games.apply(add_piece_count)
+
+
+def add_elo_to_dataset(row):
+    uci = row["piece_uci"]
+    uci = uci.split(" ")
+    uci = [token for i, token in enumerate(uci) if i % 3 == 0]
+    uci = " ".join(uci)
+
+    white_elo = row["white_elo"]
+    black_elo = row["black_elo"]
+    
+    elo_piece_uci = (
+        str(white_elo // 100 * 100)
+        + " "
+        + str(black_elo // 100 * 100)
+        + " "
+        + uci
+    )
+
+    return {"game": elo_piece_uci}
 
 
 def add_elo_and_piece_count_to_dataset(row):

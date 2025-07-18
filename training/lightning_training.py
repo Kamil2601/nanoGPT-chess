@@ -9,6 +9,7 @@ import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset, Sampler
 from torchmetrics.classification import MulticlassAccuracy
+from torchmetrics.text import Perplexity
 
 from data_process.tokenizers import (FullMoveTokenizer, FullMoveTokenizerNoEOS,
                                      Tokenizer)
@@ -52,7 +53,6 @@ class LightningGPT(pl.LightningModule):
         learning_rate=1e-3,
         weight_decay=0.0,
         tokenizer=None,
-        test_acc_timesteps=False,
         acc_n_bins=30,
         acc_bin_range=10,
         test_start_token=10,
@@ -60,6 +60,7 @@ class LightningGPT(pl.LightningModule):
         training_ignore_first_n_targets=0,
         training_target_step=1,
         masked_elo_test=False,
+        use_elo=True
     ):
         super().__init__()
         self.model = GPT(config)
@@ -78,18 +79,22 @@ class LightningGPT(pl.LightningModule):
         self.masked_elo_test = masked_elo_test
 
         self.test_accuracy = MulticlassAccuracy(
-            tokenizer.vocab_size, ignore_index=0, average="micro"
+            tokenizer.vocab_size, ignore_index=self.tokenizer.pad_token_id, average="micro"
         )
 
-        self.test_acc_timesteps = test_acc_timesteps
+        self.use_elo = use_elo
 
-        if self.test_acc_timesteps:
-            self.test_acc_bins = [
-                MulticlassAccuracy(
-                    tokenizer.vocab_size, ignore_index=0, average="micro"
-                ).cpu()
-                for _ in range(acc_n_bins)
-            ]
+        self.accuracy_per_elo = {}
+
+        self.test_perplexity = Perplexity(ignore_index=self.tokenizer.pad_token_id)
+
+
+        self.test_acc_bins = [
+            MulticlassAccuracy(
+                tokenizer.vocab_size, ignore_index=self.tokenizer.pad_token_id, average="micro"
+            ).cpu()
+            for _ in range(acc_n_bins)
+        ]
 
         self.acc_n_bins = acc_n_bins
         self.acc_bin_range = acc_bin_range
@@ -132,27 +137,96 @@ class LightningGPT(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         if self.masked_elo_test:
-            self.masked_elo_test_step(batch)
+            logits, target_moves = self.logits_and_targets_for_masked_elo(batch)
         else:
-            self.standard_test_step(batch)
+            logits, target_moves = self.logits_and_targets_no_mask(batch)
 
-        # if self.test_acc_timesteps:
-        #     for i in range(self.acc_n_bins):
-        #         start = i * self.acc_bin_range
-        #         end = (i + 1) * self.acc_bin_range
-        #         self.test_acc_bins[i].update(y_pred[:, start:end], y[:, start:end])
+        predicted_moves = torch.argmax(logits, dim=-1)
+
+        self.test_accuracy.update(
+            predicted_moves,
+            target_moves,
+        )
+
+        self.test_perplexity.update(
+            logits,
+            target_moves
+        )
+
+        predicted_moves = predicted_moves.to(self.device)
+        target_moves = target_moves.to(self.device)
+
+        for i in range(self.acc_n_bins):
+            start = i * self.acc_bin_range
+            end = (i + 1) * self.acc_bin_range
+            self.test_acc_bins[i].update(predicted_moves[:, start:end].cpu(), target_moves[:, start:end].cpu())
+
+        if not self.use_elo:
+            return
+        
+        target_white_moves = target_moves[:, ::2, ...].to(self.device)
+        target_black_moves = target_moves[:, 1::2, ...].to(self.device)
+
+        predicted_white_moves = predicted_moves[:, ::2, ...].to(self.device)
+        predicted_black_moves = predicted_moves[:, 1::2, ...].to(self.device)
+
+        inputs = batch[0].to(self.device)
+
+        for i in range(len(batch)):
+            white_elo = self.tokenizer.decode_token(inputs[i][0].item())
+            black_elo = self.tokenizer.decode_token(inputs[i][1].item())
+
+            white_elo_key = f"{white_elo}"
+            black_elo_key = f"{black_elo}"
+            white_black_key = f"{white_elo_key}_{black_elo_key}"
+            black_white_key = f"{black_elo_key}_{white_elo_key}"
+
+            for key in [white_elo_key, black_elo_key, white_black_key, black_white_key]:
+                if key not in self.accuracy_per_elo:
+                    self.accuracy_per_elo[key] = MulticlassAccuracy(
+                        self.tokenizer.vocab_size, ignore_index=self.tokenizer.pad_token_id, average="micro"
+                    ).to(self.device)
+
+
+            self.accuracy_per_elo[white_elo_key].update(
+                predicted_white_moves[i],
+                target_white_moves[i],
+            )
+            self.accuracy_per_elo[black_elo_key].update(
+                predicted_black_moves[i],
+                target_black_moves[i],
+            )
+
+            self.accuracy_per_elo[white_black_key].update(
+                predicted_white_moves[i],
+                target_white_moves[i],
+            )
+
+            self.accuracy_per_elo[black_white_key].update(
+                predicted_black_moves[i],
+                target_black_moves[i],
+            )
+
+
+    
 
     def on_test_epoch_end(self):
         self.log("test_acc", self.test_accuracy.compute())
         self.test_accuracy.reset()
 
-        # if self.test_acc_timesteps:
-        #     for i in range(self.acc_n_bins):
-        #         self.log(
-        #             f"test_acc_ply_{i * self.acc_bin_range+1}-{(i+1)*self.acc_bin_range}",
-        #             self.test_acc_bins[i].compute(),
-        #         )
-        #         self.test_acc_bins[i].reset()
+        self.log("test_perplexity", self.test_perplexity.compute())
+        self.test_perplexity.reset()
+
+        for elo_key, accuracy in self.accuracy_per_elo.items():
+            self.log(f"test_acc_elo_{elo_key}", accuracy.compute())
+            accuracy.reset()
+
+        for i in range(self.acc_n_bins):
+            self.log(
+                f"test_acc_ply_{i * self.acc_bin_range+1}-{(i+1)*self.acc_bin_range}",
+                self.test_acc_bins[i].compute(),
+            )
+            self.test_acc_bins[i].reset()
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
@@ -173,6 +247,50 @@ class LightningGPT(pl.LightningModule):
             y[:, self.test_start_token :: self.test_token_step, ...],
         )
 
+    def logits_and_targets_for_masked_elo(self, batch):
+        x, y = batch
+        x_black_elo_masked = x.clone()
+        x_black_elo_masked[:, 1, ...] = self.tokenizer.unk_elo_token_id
+
+        x_white_elo_masked = x.clone()
+        x_white_elo_masked[:, 0, ...] = self.tokenizer.unk_elo_token_id
+
+        batch_black_elo_masked = (x_black_elo_masked, y)
+        batch_white_elo_masked = (x_white_elo_masked, y)
+
+        output_black_elo_masked, _  = self.forward_batch_test(batch_black_elo_masked)
+        output_white_elo_masked, _  = self.forward_batch_test(batch_white_elo_masked)
+
+        output_white_moves = output_black_elo_masked[:, self.test_start_token :: self.test_token_step, ...][:, ::2, ...]
+        output_black_moves = output_white_elo_masked[:, self.test_start_token :: self.test_token_step, ...][:, 1::2, ...]
+
+        min_len = min(output_white_moves.size(1), output_black_moves.size(1))
+
+        output_white_moves_cut = output_white_moves[:, :min_len, :]
+        output_black_moves_cut = output_black_moves[:, :min_len, :]
+
+        stacked = torch.stack((output_white_moves_cut, output_black_moves_cut), dim=2)
+
+        output_all_moves = stacked.reshape(output_white_moves.size(0), -1, output_white_moves.size(2))
+
+        if output_white_moves.size(1) > output_black_moves.size(1):
+            last_white = output_white_moves[:, -1:, :]  # (batch, 1, vocab)
+            output_all_moves = torch.cat((output_all_moves, last_white), dim=1)  # (batch, 2*min_len + 1, vocab)
+
+        target_moves = y[:, self.test_start_token :: self.test_token_step, ...]
+
+        return output_all_moves, target_moves
+    
+    def logits_and_targets_no_mask(self, batch):
+        x, y = batch
+        output, _ = self.forward_batch_test(batch)
+
+        output_all_moves = output[:, self.test_start_token :: self.test_token_step, ...]
+        target_moves = y[:, self.test_start_token :: self.test_token_step, ...]
+
+        return output_all_moves, target_moves
+
+
     def masked_elo_test_step(self, batch):
         x, y = batch
         x_black_elo_masked = x.clone()
@@ -186,27 +304,53 @@ class LightningGPT(pl.LightningModule):
 
         output_black_elo_masked, _  = self.forward_batch_test(batch_black_elo_masked)
         output_white_elo_masked, _  = self.forward_batch_test(batch_white_elo_masked)
- 
-        y_pred_black_elo_masked = torch.argmax(output_black_elo_masked, dim=-1)
-        y_pred_white_elo_masked = torch.argmax(output_white_elo_masked, dim=-1)
 
-        predicted_white_moves = y_pred_black_elo_masked[:, self.test_start_token :: self.test_token_step, ...][:, ::2, ...]
-        predicted_black_moves = y_pred_white_elo_masked[:, self.test_start_token :: self.test_token_step, ...][:, 1::2, ...]
+        output_white_moves = output_black_elo_masked[:, self.test_start_token :: self.test_token_step, ...][:, ::2, ...]
+        output_black_moves = output_white_elo_masked[:, self.test_start_token :: self.test_token_step, ...][:, 1::2, ...]
 
-        target_white_moves = y[:, self.test_start_token :: self.test_token_step, ...][:, ::2, ...]
-        target_black_moves = y[:, self.test_start_token :: self.test_token_step, ...][:, 1::2, ...]
+        stacked = torch.stack((output_white_moves, output_black_moves), dim=2)
 
+        output_all_moves = stacked.reshape(output_white_moves.size(0), -1, output_white_moves.size(2))
 
-        self.test_accuracy.update(
-            predicted_white_moves,
-            target_white_moves,
-        )
+        predicted_moves = torch.argmax(output_all_moves, dim=-1)
+        target_moves = y[:, self.test_start_token :: self.test_token_step, ...]
 
         self.test_accuracy.update(
-            predicted_black_moves,
-            target_black_moves,
+            predicted_moves,
+            target_moves,
         )
 
+        self.test_perplexity.update(
+            output_all_moves,
+            target_moves
+        )
+
+        # predicted_white_moves = torch.argmax(output_white_moves, dim=-1)
+        # predicted_black_moves = torch.argmax(output_black_moves, dim=-1)
+
+        # target_white_moves = y[:, self.test_start_token :: self.test_token_step, ...][:, ::2, ...]
+        # target_black_moves = y[:, self.test_start_token :: self.test_token_step, ...][:, 1::2, ...]
+
+
+        # self.test_accuracy.update(
+        #     predicted_white_moves,
+        #     target_white_moves,
+        # )
+
+        # self.test_accuracy.update(
+        #     predicted_black_moves,
+        #     target_black_moves,
+        # )
+
+        # self.test_perplexity.update(
+        #     output_white_moves,
+        #     target_white_moves
+        # )
+
+        # self.test_perplexity.update(
+        #     output_black_moves,
+        #     target_black_moves
+        # )
 
 class LightningGPTWeighted(LightningGPT):
     def forward_batch(self, batch):
