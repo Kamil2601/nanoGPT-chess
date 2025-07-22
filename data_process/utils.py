@@ -54,8 +54,6 @@ def join_material_tokens(piece_uci: pd.Series, replace_bigger_values: bool = Tru
 
 
 
-
-
 def remove_last_player_material_token(piece_uci: pd.Series):
     def filter_func(uci):
         uci = uci.split(" ")

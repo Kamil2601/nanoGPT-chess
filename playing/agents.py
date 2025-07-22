@@ -7,6 +7,7 @@ from tqdm import tqdm
 from transformers import AutoModel, GPT2LMHeadModel
 
 from data_process.tokenizers import (FullMoveEloMaterialTokenizer,
+                                     FullMoveEloPieceCountTokenizer,
                                      FullMoveTokenizerNoEOS,
                                      FullMoveTokenizerWithElo, SquareTokenizer)
 from data_process.vocabulary import PieceMove
@@ -61,20 +62,22 @@ class GPTAgent(Agent):
         return chess.Move.from_uci(best_legal_move[1:])
 
 class GPTEloAgent(Agent):
-    def __init__(self, model: GPT, model_elo, use_material_tokens = False) -> None:
+    def __init__(self, model: GPT, model_elo, notes = "none") -> None:
         super().__init__()
         self.model = model
         self.model.cpu()
-        self.use_material_tokens = use_material_tokens
+        self.notes = notes
         self.model_elo = str(model_elo // 100 * 100)
-        
-        if use_material_tokens:
+
+        if notes == "material":
             self.tokenizer = FullMoveEloMaterialTokenizer()
+        elif notes == "piece_count":
+            self.tokenizer = FullMoveEloPieceCountTokenizer()
         else:
             self.tokenizer = FullMoveTokenizerWithElo()
 
     def play(self, board: chess.Board):
-        game_str = board_to_piece_uci_moves(board, include_material=self.use_material_tokens)
+        game_str = board_to_piece_uci_moves(board, notes=self.notes)
 
         if board.turn == chess.WHITE:
             game_str = [self.model_elo, self.tokenizer.unk_elo_token] + game_str
@@ -98,7 +101,43 @@ class GPTEloAgent(Agent):
             best_legal_move = legal_moves[best_legal_move_index]
 
             return chess.Move.from_uci(best_legal_move[1:])
-    
+        
+    def legal_moves_probabilities(self, board: chess.Board, game_str: list = None):
+        if game_str is None:
+            game_str = board_to_piece_uci_moves(board, notes=self.notes)
+
+        if board.turn == chess.WHITE:
+            game_str = [self.model_elo, self.tokenizer.unk_elo_token] + game_str
+        else:
+            game_str = [self.tokenizer.unk_elo_token, self.model_elo] + game_str
+
+        game_encoded = self.tokenizer.encode(game_str)
+
+        legal_moves = legal_moves_piece_uci(board)
+        legal_moves_encoded = self.tokenizer.encode(legal_moves)
+
+        with torch.inference_mode():
+            game_tensor = torch.tensor(game_encoded).unsqueeze(0)
+
+            model_output, _ = self.model(game_tensor)
+
+            legal_moves_scores = model_output[0, -1, legal_moves_encoded].softmax(-1)
+
+            zipped_moves_scores = zip(legal_moves, legal_moves_scores.tolist())
+            legal_moves_scores = sorted(zipped_moves_scores, key=lambda x: x[1], reverse=True)
+
+            legal_moves_scores = {move: score for move, score in legal_moves_scores}
+
+            return legal_moves_scores
+        
+
+class GPTEloMaterialAgent(GPTEloAgent):
+    def __init__(self, model, model_elo):
+        super().__init__(model, model_elo, notes="material")
+
+class GPTEloPieceCountAgent(GPTEloAgent):
+    def __init__(self, model, model_elo):
+        super().__init__(model, model_elo, notes="piece_count")
 
 
 class GPTNocheckAgent(Agent):
