@@ -31,6 +31,9 @@ class Tokenizer:
     
     def decode_token(self, token_idx):
         return self.itos[token_idx]
+    
+    def encode_token(self, token):
+        return self.stoi[token]
 
     def tokenize(self, text: str) -> list:
         pass

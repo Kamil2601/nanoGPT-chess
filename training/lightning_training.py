@@ -261,6 +261,8 @@ class LightningGPT(pl.LightningModule):
 
     def logits_and_targets_for_masked_elo(self, batch):
         x, y = batch
+        x = x.to(self.device)
+        y = y.to(self.device)
         x_black_elo_masked = x.clone()
         x_black_elo_masked[:, 1, ...] = self.tokenizer.unk_elo_token_id
 

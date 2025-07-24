@@ -100,16 +100,17 @@ def test_elo_agent(agent, games_df):
 
 games_df = pd.read_csv("./data/test_piece_count.csv", delimiter=";")
 
-# games_df = games_df.sample(frac=0.1, random_state=42)
-games_df = games_df[
-    (games_df["white_elo"] // 100 * 100 == 1500)
-    & (games_df["black_elo"] // 100 * 100 == 1500)
-]
+games_df = games_df.sample(n=1000, random_state=42)
+# games_df = games_df[
+#     (games_df["white_elo"] // 100 * 100 == 1500)
+#     & (games_df["black_elo"] // 100 * 100 == 1500)
+# ]
 
 
-agent = GPTEloAgent(model=piece_count_model.model, model_elo=1500, notes="piece_count")
+for elo in range(900, 2900, 100):
+    print(f"Testing elo agent with elo {elo}")
+    agent = GPTEloAgent(model=piece_count_model.model, model_elo=elo, notes="piece_count")
+    probabilities = test_elo_agent(agent, games_df)
 
-probabilities = test_elo_agent(agent, games_df)
-
-with open("move_probabilities.json", "w") as f:
-    json.dump(probabilities, f)
+    with open(f"model_predictions/elo_{elo}.json", "w") as f:
+        json.dump(probabilities, f)
