@@ -140,6 +140,12 @@ def add_elo_and_piece_count_to_dataset(row):
     uci = row["piece_uci"]
     uci = uci.split(" ")
     uci = [token for i, token in enumerate(uci) if i % 6 in [0, 2, 3, 4]]
+
+    ply_30s = row["ply_30s"]
+
+    if ply_30s != -1:
+        uci = uci[:(2*ply_30s)]
+
     uci = " ".join(uci)
 
     white_elo = row["white_elo"]

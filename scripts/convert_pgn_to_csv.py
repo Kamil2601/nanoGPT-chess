@@ -1,6 +1,7 @@
 import csv
 import io
 import os
+import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
@@ -9,11 +10,19 @@ import chess.pgn
 from tqdm import tqdm
 from utils import material
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+
+from data_process.utils import piece_count_tokens
+
 input_file_path = "./data/lichess_db_standard_rated_2024-12.pgn"
-output_file_path = "./data/lichess_db_standard_rated_2024-12.csv"
+output_file_path = "./data/csv/lichess_db_standard_rated_2024-12.csv"
 num_proc = 15
 
 add_material_info = True
+
+# material_function = material
+material_function = piece_count_tokens
 
 
 
@@ -45,6 +54,7 @@ def game_to_csv_row(game: chess.pgn.Game | str):
     black_elo = int(game.headers['BlackElo'])
     result = game.headers['Result']
     date = game.headers['UTCDate']
+    event = game.headers['Event']
 
     board = game.board()
     moves_uci = []
@@ -72,12 +82,12 @@ def game_to_csv_row(game: chess.pgn.Game | str):
         board.push(move)
 
         if add_material_info:
-            material_white, material_black = material(board)
+            material_white, material_black = material_function(board)
             moves_uci += [str(material_white), str(material_black)]
 
     uci_str = " ".join(moves_uci)
 
-    return game_id, date, white_elo, black_elo, result, game_length, less_than_30_seconds_move, uci_str
+    return game_id, event, date, white_elo, black_elo, result, game_length, less_than_30_seconds_move, uci_str
 
 
 def game_to_csv_row_with_index(game_with_index: tuple[chess.pgn.Game, int]):
@@ -115,6 +125,9 @@ def convert_file(input_file_path, output_file_path, skip_games = False):
             except:
                 pass
 
+    
+    print(game_index)
+
 
     with open(input_file_path, 'r') as input_file, open(output_file_path, 'a') as output_file:
         writer = csv.writer(output_file, delimiter=';')
@@ -150,14 +163,21 @@ def convert_file(input_file_path, output_file_path, skip_games = False):
 
 
 def main():
-    input_files_dir = Path("./data/pgn-elite-older")
-    input_files = input_files_dir.glob("*.pgn")
+    # input_files_dir = Path("./data/pgn")
+    # input_files = input_files_dir.glob("*.pgn")
 
-    output_file = Path("./data/csv/raw/lichess_elite_database-older.csv")
+    # output_file = Path("./data/csv/raw/")
 
-    for input_file_path in input_files:
-        print(f"Converting {input_file_path} to csv")
-        convert_file(input_file_path, output_file, skip_games=False)
+    # for input_file_path in input_files:
+    #     print(f"Converting {input_file_path} to csv")
+    #     convert_file(input_file_path, output_file, skip_games=False)
+
+    input_file = Path("../data/pgn/lichess_db_standard_rated_2025-12.pgn")
+    output_file = Path("../data/csv/lichess_db_standard_rated_2025-12.csv")
+
+    # output_file.mkdir(parents=True, exist_ok=True)
+
+    convert_file(input_file, output_file, skip_games=True)
 
 
 if __name__ == "__main__":

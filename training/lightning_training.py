@@ -112,7 +112,7 @@ class LightningGPT(pl.LightningModule):
             x,
             y,
             ignore_first_n_targets=self.training_ignore_first_n_targets,
-            target_step=self.trainig_target_step,
+            target_step=self.training_target_step,
         )
         return output, loss
 
@@ -314,11 +314,35 @@ class LightningGPTWeighted(LightningGPT):
 
 ### DATASETS ###
 
-
 class GamesDataset(Dataset):
     def __init__(self, games, tokenizer, mask_elo_token=False):
         self.games = games
+        self.tokenizer = tokenizer
+        self.mask_elo_token = mask_elo_token
+
+    def __len__(self):
+        return len(self.games)
+
+    def __getitem__(self, idx):
+        x = torch.tensor(self.games[idx]["input_ids"], dtype=torch.long)
+        y = torch.tensor(self.games[idx]["target_ids"], dtype=torch.long)
+        
+        if self.mask_elo_token:
+            index_to_mask = np.random.choice([0, 1])
+            # print(x)
+            x[index_to_mask] = self.tokenizer.unk_elo_token_id
+
+            if index_to_mask == 1:
+                y[0] = self.tokenizer.unk_elo_token_id        
+        return x, y
+
+class GamesDatasetOld(Dataset):
+    def __init__(self, games, tokenizer, mask_elo_token=False):
+        self.games = games
+        print("Encoding games...")
         self.encoded_games = games.map(lambda row: {"game": tokenizer.encode(row["game"])}, num_proc=6)
+        print("Finished encoding games.")
+        print(self.encoded_games[0]["game"])
         self.tokenizer = tokenizer
         self.mask_elo_token = mask_elo_token
 
@@ -445,6 +469,27 @@ class SimilarLengthSequenceBatchSampler(Sampler):
             return len(self.data_source) // self.batch_size
         else:
             return (len(self.data_source) + self.batch_size - 1) // self.batch_size
+        
+
+class FastBatchSampler(Sampler):
+    def __init__(self, lengths, batch_size):
+        self.batch_size = batch_size
+        self.lengths = np.array(lengths)
+
+        sorted_idx = np.argsort(self.lengths)
+
+        usable_size = (len(sorted_idx) // batch_size) * batch_size
+        sorted_idx = sorted_idx[:usable_size]
+
+        self.batches = sorted_idx.reshape(-1, batch_size)
+
+    def __iter__(self):
+        shuffled_batches = np.random.permutation(len(self.batches))
+        for i in shuffled_batches:
+            yield self.batches[i].tolist()
+
+    def __len__(self):
+        return len(self.batches)
 
 
 ### PL DATA MODULES ###
@@ -558,10 +603,10 @@ class GamesDataModule(pl.LightningDataModule):
             )
 
     def train_dataloader(self) -> Any:
-        batch_sampler = SimilarLengthSequenceBatchSampler(
+        batch_sampler = FastBatchSampler(
             self.datasets["train"]["ply"],
             batch_size=self.batch_size,
-            drop_last=False,
+            # drop_last=False,
         )
 
         return DataLoader(
@@ -569,7 +614,18 @@ class GamesDataModule(pl.LightningDataModule):
             batch_sampler=batch_sampler,
             num_workers=self.num_workers,
             collate_fn=self.collate_fn,
+            pin_memory=True
         )
+
+    def train_dataloader_2(self) -> Any:
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+            collate_fn=self.collate_fn,
+        )
+
 
     def val_dataloader(self) -> Any:
         return DataLoader(
