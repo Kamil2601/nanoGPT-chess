@@ -329,7 +329,6 @@ class GamesDataset(Dataset):
         
         if self.mask_elo_token:
             index_to_mask = np.random.choice([0, 1])
-            # print(x)
             x[index_to_mask] = self.tokenizer.unk_elo_token_id
 
             if index_to_mask == 1:

@@ -52,6 +52,8 @@ def game_to_csv_row(game: chess.pgn.Game | str):
     game_id = game.headers['Site'].split("/")[-1]
     white_elo = int(game.headers['WhiteElo'])
     black_elo = int(game.headers['BlackElo'])
+    white_title = game.headers.get('WhiteTitle', '')
+    black_title = game.headers.get('BlackTitle', '')
     result = game.headers['Result']
     date = game.headers['UTCDate']
     event = game.headers['Event']
@@ -83,11 +85,15 @@ def game_to_csv_row(game: chess.pgn.Game | str):
 
         if add_material_info:
             material_white, material_black = material_function(board)
-            moves_uci += [str(material_white), str(material_black)]
+            # moves_uci += [str(material_white), str(material_black)]
+            if board.turn == chess.WHITE:
+                moves_uci.append(str(material_white))
+            else:
+                moves_uci.append(str(material_black))
 
     uci_str = " ".join(moves_uci)
 
-    return game_id, event, date, white_elo, black_elo, result, game_length, less_than_30_seconds_move, uci_str
+    return game_id, event, date, white_elo, black_elo, white_title, black_title, result, game_length, less_than_30_seconds_move, uci_str
 
 
 def game_to_csv_row_with_index(game_with_index: tuple[chess.pgn.Game, int]):
@@ -105,14 +111,18 @@ def game_to_csv_row_with_index(game_with_index: tuple[chess.pgn.Game, int]):
 def read_game(f):
     game = []
     moves_read = False
+    is_rapid = False
     for line in f:
         game.append(line)
         if line.startswith("1."):
             moves_read = True
 
+        if "Rapid" in line:
+            is_rapid = True
+
         if line == "\n" and moves_read:
-            return "".join(game)
-    return None
+            return "".join(game), is_rapid
+    return None, False
 
 def convert_file(input_file_path, output_file_path, skip_games = False):
     game_index = 0
@@ -121,16 +131,24 @@ def convert_file(input_file_path, output_file_path, skip_games = False):
         last_game = read_n_to_last_line(output_file_path, 1)
         if len(last_game) > 2:
             try:
-                game_index = int(last_game.split(";")[0])
+                game_index = int(last_game.split(",")[0])
             except:
                 pass
 
     
     print(game_index)
 
+    headers = "index,id,event,date,white_elo,black_elo,white_title,black_title,result,ply,ply_30s,piece_uci\n"
+
+    with open(output_file_path, 'w+') as f:
+        is_empty = not bool(f.readlines())
+
+        if is_empty:
+            f.write(headers)
+
 
     with open(input_file_path, 'r') as input_file, open(output_file_path, 'a') as output_file:
-        writer = csv.writer(output_file, delimiter=';')
+        writer = csv.writer(output_file)
 
         if skip_games:
             for i in tqdm(range(game_index), desc="Skipping games"):
@@ -140,13 +158,14 @@ def convert_file(input_file_path, output_file_path, skip_games = False):
 
         while True:
             games_to_process = []
-            for i in range(100000):
-                game = read_game(input_file)
+            for i in range(500000):
+                game, is_rapid = read_game(input_file)
 
                 if game is None:
                     break
 
-                games_to_process.append((str(game), game_index))
+                if is_rapid:
+                    games_to_process.append((str(game), game_index))
                 game_index += 1
 
             with ProcessPoolExecutor(max_workers=num_proc) as executor:
@@ -172,12 +191,12 @@ def main():
     #     print(f"Converting {input_file_path} to csv")
     #     convert_file(input_file_path, output_file, skip_games=False)
 
-    input_file = Path("../data/pgn/lichess_db_standard_rated_2025-12.pgn")
-    output_file = Path("../data/csv/lichess_db_standard_rated_2025-12.csv")
+    input_file = Path("../data/pgn/lichess_db_standard_rated_2025-06.pgn")
+    output_file = Path("../data/csv/raw/lichess_db_standard_rated_2025-06_rapid.csv")
 
     # output_file.mkdir(parents=True, exist_ok=True)
 
-    convert_file(input_file, output_file, skip_games=True)
+    convert_file(input_file, output_file, skip_games=False)
 
 
 if __name__ == "__main__":

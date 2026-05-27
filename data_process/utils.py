@@ -139,7 +139,7 @@ def add_elo_to_dataset(row):
 def add_elo_and_piece_count_to_dataset(row):
     uci = row["piece_uci"]
     uci = uci.split(" ")
-    uci = [token for i, token in enumerate(uci) if i % 6 in [0, 2, 3, 4]]
+    # uci = [token for i, token in enumerate(uci) if i % 6 in [0, 2, 3, 4]]
 
     ply_30s = row["ply_30s"]
 

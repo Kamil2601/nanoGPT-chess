@@ -34,7 +34,7 @@ from training.lightning_training import (GamesDataModule, GamesDataset, Lightnin
 tokenizer = FullMoveEloPieceCountTokenizer()
 # tokenizer = FullMoveTokenizerNoEOS()
 
-block_size = 604
+block_size = 1024
 
 model_config_small = GPTConfig(
     block_size=block_size,
@@ -113,8 +113,8 @@ columns_to_load = [
 
 # Define file paths and column names
 data_files = {
-    "train": "./data/csv/train.csv",
-    "validation": "./data/csv/val.csv",
+    "train": "./data/csv/train_val_test/train.csv",
+    "validation": "./data/csv/train_val_test/validation.csv",
 }
 
 def main():
@@ -122,7 +122,7 @@ def main():
     datasets = load_dataset(
         "csv",
         data_files=data_files,
-        delimiter=";",
+        delimiter=",",
         usecols=columns_to_load,
         # num_proc=1,
     )
@@ -166,18 +166,12 @@ def main():
         remove_columns=["game"]
     )
 
+    print(datasets["train"][0]["input_ids"])
 
-    datasets = datasets.filter(lambda x: len(x["input_ids"]) > 5, num_proc=num_workers)
+
+    # datasets = datasets.filter(lambda x: len(x["input_ids"]) > 5, num_proc=num_workers)
     datasets = datasets.filter(lambda x: len(x["input_ids"]) <= block_size, num_proc=num_workers)
 
-    # print(type(tokenizer))
-    # print(tokenizer.unk_elo_token_id)
-
-    # games_dataset = GamesDataset(datasets["train"], tokenizer, mask_elo_token=mask_elo_token)
-
-    # print(games_dataset[0])
-
-    # exit()
 
     data_module = data_module = GamesDataModule(
         datasets=datasets,
