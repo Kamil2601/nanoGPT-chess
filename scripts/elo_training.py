@@ -79,14 +79,14 @@ batch_size = 32
 
 num_workers = 14
 
-ignore_first_n_targets = 1
-training_target_step = 2 # 2 is for ignoring material prediction during loss calculation, otherwise should be 1
+# ignore_first_n_targets = 1
+# training_target_step = 2 # 2 is for ignoring material prediction during loss calculation, otherwise should be 1
 
 
 tensorboard_logger_version = None # SET TO NONE FOR FUTURE TRAININGS
 
 
-tensorboard_logger_name = "piece_uci_4kk_train"
+tensorboard_logger_name = "2kk_elo_1000-2000_masked_moves"
 checkpoint_path = f"./models/{tensorboard_logger_name}"
 tensorboard_dir = f"./lightning_logs/"
 
@@ -142,16 +142,8 @@ def main():
     ]
 
     datasets = datasets.map(add_elo_and_piece_count_to_dataset, num_proc=6, remove_columns=columns_to_remove)
-    # datasets = datasets.map(row_for_base_training, num_proc=6, remove_columns=columns_to_remove)
 
-    # cuts = list(games_df.ply_30s)
-
-    # print(games[0])
-
-
-    # print(datasets["train"][0])
-
-    # exit()
+    print(datasets["train"][0])
 
     def encode_batch(batch):
         return {
@@ -161,12 +153,14 @@ def main():
 
     datasets = datasets.map(
         encode_batch,
-        batched=True,          # ← VERY IMPORTANT (huge speedup)
+        batched=True,
         num_proc=6,
-        remove_columns=["game"]
+        # remove_columns=["game"]
     )
 
-    print(datasets["train"][0]["input_ids"])
+    print(datasets["train"])
+
+    
 
 
     # datasets = datasets.filter(lambda x: len(x["input_ids"]) > 5, num_proc=num_workers)
@@ -183,20 +177,17 @@ def main():
 
     print(next(iter(data_module.train_dataloader())))
 
+
     if checkpoint is None:
         pl_model = LightningGPT(
             model_config,
             learning_rate=learning_rate,
-            training_ignore_first_n_targets=ignore_first_n_targets,
-            training_target_step=training_target_step
         )
     else:
         pl_model = LightningGPT.load_from_checkpoint(
             checkpoint,
             config=model_config,
             learning_rate=learning_rate,
-            training_ignore_first_n_targets=ignore_first_n_targets,
-            training_target_step=training_target_step
         )
 
 
@@ -213,9 +204,9 @@ def main():
         max_epochs=max_epochs,
         callbacks=[pl.callbacks.RichProgressBar(), checkpoint_callback],
         logger=tensorboard_logger,
-        # precision="16",
+        precision="bf16-mixed",
         # default_root_dir=
-        # fast_dev_run=True,
+        fast_dev_run=False,
     )
 
     torch.set_float32_matmul_precision("medium")

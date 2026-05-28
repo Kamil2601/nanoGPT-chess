@@ -57,8 +57,6 @@ class LightningGPT(pl.LightningModule):
         acc_bin_range=10,
         test_start_token=10,
         test_token_step=1,
-        training_ignore_first_n_targets=0,
-        training_target_step=1,
         masked_elo_test=False,
         use_elo=True
     ):
@@ -74,8 +72,6 @@ class LightningGPT(pl.LightningModule):
         self.weight_decay = weight_decay
         self.test_start_token = test_start_token
         self.test_token_step = test_token_step
-        self.training_ignore_first_n_targets = training_ignore_first_n_targets
-        self.training_target_step = training_target_step
         self.masked_elo_test = masked_elo_test
 
         self.test_accuracy = MulticlassAccuracy(
@@ -103,26 +99,24 @@ class LightningGPT(pl.LightningModule):
         return self.model(x, y)
 
     def forward_batch(self, batch):
-        x, y = batch
-        return self.model(x, y)
+        x, y, mask = batch
+        return self.model(x, y, loss_mask=mask)
 
     def forward_batch_training_validation(self, batch):
-        x, y = batch
+        x, y, mask = batch
         output, loss = self.model(
             x,
             y,
-            ignore_first_n_targets=self.training_ignore_first_n_targets,
-            target_step=self.training_target_step,
+            loss_mask=mask
         )
         return output, loss
 
     def forward_batch_test(self, batch):
-        x, y = batch
+        x, y, mask = batch
         output, loss = self.model(
             x,
             y,
-            ignore_first_n_targets=self.test_start_token,
-            target_step=self.test_token_step,
+            loss_mask = mask
         )
         return output, loss
 
@@ -315,10 +309,11 @@ class LightningGPTWeighted(LightningGPT):
 ### DATASETS ###
 
 class GamesDataset(Dataset):
-    def __init__(self, games, tokenizer, mask_elo_token=False):
+    def __init__(self, games, tokenizer, mask_elo_token=False, mask_masked_player_moves=True):
         self.games = games
         self.tokenizer = tokenizer
         self.mask_elo_token = mask_elo_token
+        self.mask_masked_player_moves = mask_masked_player_moves
 
     def __len__(self):
         return len(self.games)
@@ -326,40 +321,33 @@ class GamesDataset(Dataset):
     def __getitem__(self, idx):
         x = torch.tensor(self.games[idx]["input_ids"], dtype=torch.long)
         y = torch.tensor(self.games[idx]["target_ids"], dtype=torch.long)
+
+        mask_length = len(y) - 1
         
         if self.mask_elo_token:
             index_to_mask = np.random.choice([0, 1])
             x[index_to_mask] = self.tokenizer.unk_elo_token_id
 
             if index_to_mask == 1:
-                y[0] = self.tokenizer.unk_elo_token_id        
-        return x, y
+                y[0] = self.tokenizer.unk_elo_token_id
 
-class GamesDatasetOld(Dataset):
-    def __init__(self, games, tokenizer, mask_elo_token=False):
-        self.games = games
-        print("Encoding games...")
-        self.encoded_games = games.map(lambda row: {"game": tokenizer.encode(row["game"])}, num_proc=6)
-        print("Finished encoding games.")
-        print(self.encoded_games[0]["game"])
-        self.tokenizer = tokenizer
-        self.mask_elo_token = mask_elo_token
+            if self.mask_masked_player_moves:
+                if index_to_mask == 0:
+                    mask_pattern = [0,0,1,0]
+                else:
+                    mask_pattern = [1,0,0,0]
 
-    def __len__(self):
-        return len(self.games)
+                mask_pattern = torch.tensor(mask_pattern, dtype=torch.long)
+                mask = mask_pattern.repeat((mask_length + len(mask_pattern) - 1) // len(mask_pattern))[:mask_length]
 
-    def __getitem__(self, idx):
-        encoded_game = self.encoded_games[idx]["game"]
-        encoded_game = torch.tensor(encoded_game, dtype=torch.long)
+                mask = torch.cat([torch.tensor([0], dtype=torch.long), mask])
 
-        if self.mask_elo_token:
-            index_to_mask = np.random.choice([0, 1])
-            encoded_game[index_to_mask] = self.tokenizer.unk_elo_token_id
-
-        x = encoded_game[:-1]
-        y = encoded_game[1:]
-        return x, y
-    
+            
+        return {
+            "input_ids": x,
+            "target_ids": y,
+            "loss_mask": mask
+        }    
 
 class TestGamesDataset(Dataset):
     def __init__(self, games, tokenizer, mask_elo_token=False):
@@ -508,13 +496,15 @@ def pad_sequence(sequences, padding_value=0):
 
 
 def collate_fn(data):
-    inputs = [d[0] for d in data]
-    targets = [d[1] for d in data]
+    inputs = [d["input_ids"] for d in data]
+    targets = [d["target_ids"] for d in data]
+    masks = [d["loss_mask"] for d in data]
 
     padded_inputs = pad_sequence(inputs, padding_value=0)
     padded_targets = pad_sequence(targets, padding_value=0)
+    padded_masks = pad_sequence(masks, padding_value=0)
 
-    return padded_inputs, padded_targets
+    return padded_inputs, padded_targets, padded_masks
 
 
 def collate_fn_with_weights(data):
