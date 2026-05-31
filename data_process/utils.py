@@ -119,7 +119,7 @@ def add_piece_count_to_games(games):
 def add_elo_to_dataset(row):
     uci = row["piece_uci"]
     uci = uci.split(" ")
-    uci = [token for i, token in enumerate(uci) if i % 3 == 0]
+    uci = [token for i, token in enumerate(uci) if i % 2 == 0]
     uci = " ".join(uci)
 
     white_elo = row["white_elo"]
@@ -164,7 +164,7 @@ def add_elo_and_piece_count_to_dataset(row):
 def row_for_base_training(row):
     uci = row["piece_uci"]
     uci = uci.split(" ")
-    uci = [token for i, token in enumerate(uci) if i % 3 == 0] # Keep only the moves
+    uci = [token for i, token in enumerate(uci) if i % 2 == 0] # Keep only the moves
     uci = " ".join(uci)
 
     return {"game": uci}

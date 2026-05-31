@@ -112,11 +112,10 @@ class LightningGPT(pl.LightningModule):
         return output, loss
 
     def forward_batch_test(self, batch):
-        x, y, mask = batch
+        x, y = batch
         output, loss = self.model(
             x,
             y,
-            loss_mask = mask
         )
         return output, loss
 

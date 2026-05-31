@@ -7,7 +7,7 @@ from tqdm import tqdm
 # input_files = ["./data/csv/raw/lichess_elite_database-older.csv"]
 input_files = list(glob.glob("../data/csv/raw/*.csv"))  # This will select all .csv files in the directory
 
-output_dir = "../data/csv/elo_split"
+output_dir = "../data/csv/elo_split_2"
 
 file_name_prefix = "elo"
 
@@ -41,7 +41,7 @@ with tqdm(total=total_rows * len(input_files), desc="Processing", unit="rows") a
         for chunk in pd.read_csv(input_file, chunksize=chunksize):
             
             chunk = chunk[(chunk["white_title"] != "BOT") & (chunk["black_title"] != "BOT")]
-            chunk = chunk[chunk["ply"] >= 4]
+            chunk = chunk[(chunk["ply"] >= 4) & ((chunk["ply_30s"] == -1) | (chunk["ply_30s"] >= 4))]
             chunk = chunk[chunk["result"] != "*"]
 
             # Calculate average Elo and assign bins
